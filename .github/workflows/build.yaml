@@ -1,0 +1,93 @@
+name: CI Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - release/*
+
+  pull_request:
+    branches:
+      - main
+      - develop
+      - release/*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+
+    - name: Check out source code
+      uses: actions/checkout@v4.1.3
+      with:
+        fetch-depth: 0
+        tags: true
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Upload package
+      uses: actions/upload-artifact@v2
+      with:
+        name: python-package
+        path: dist/
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: 'java' 
+
+    - name: Build with Gradle (for CodeQL)
+      uses: eskatos/gradle-command-action@v2
+      with:
+        arguments: "bootJar test --info --build-cache"
+        gradle-version: "6.8"
+        java-version: "11"
+
+    - name: CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+        
+    - name: Get Revision
+      run: echo "REVISION=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+    - name: Generate image tags
+      run: |
+        VERSION_TAG=$(./gradlew -q printVersion)
+        IMAGE_TAGS="${VERSION_TAG}.$(date '+%Y.%m.%d').${{ env.REVISION }}"
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          IMAGE_TAGS="$VERSION_TAG,latest"
+        fi
+        echo "IMAGE_TAGS=$IMAGE_TAGS" >> $GITHUB_ENV
+        echo "Tags: $IMAGE_TAGS"
+        echo "Repo: ${{ github.repository }}"
+    
+    - name: Gradlew build
+      uses: eskatos/gradle-command-action@v2
+      with:
+        arguments: "bootJar test --info --build-cache"
+        gradle-version: "6.8" 
+        java-version: "11" 
+
+    - name: Login to Azure Container Registry
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+      uses: azure/docker-login@v1
+      with:
+        login-server: oaftech.azurecr.io
+        username: ${{ vars.ACR_PULL_USERNAME }}
+        password: ${{ secrets.ACR_PULL_PASSWORD }}
+
+    - name: Build Docker image
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+      run: docker build . -t oaftech.azurecr.io/oneacrefund/ph-ee-connector-mpesa:${{ env.IMAGE_TAGS }}
+
+    - name: Push image to registry
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+      uses: docker/login-action@v3.0.0
+      with:
+        registry: oaftech.azurecr.io
+        username: ${{ vars.ACR_PULL_USERNAME }}
+        password: ${{ secrets.ACR_PULL_PASSWORD }}
