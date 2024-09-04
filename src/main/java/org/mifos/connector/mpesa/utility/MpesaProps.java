@@ -112,6 +112,15 @@ public class MpesaProps {
             }
             return secret;
         }
+
+        @Override
+        public String toString() {
+            return "MPESA{" +
+                "name='" + name + '\'' +
+                ", businessShortCode='" + businessShortCode + '\'' +
+                ", till='" + till + '\'' +
+                '}';
+        }
     }
 }
 

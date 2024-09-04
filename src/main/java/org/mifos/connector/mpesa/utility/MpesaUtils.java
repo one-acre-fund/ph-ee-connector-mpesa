@@ -49,6 +49,9 @@ public class MpesaUtils {
     @Value("${fineract.host}")
     private String fineractHost;
 
+    private String processAMS;
+    private String processTxnId;
+
     enum ams {
         paygops,
         roster,
@@ -262,12 +265,16 @@ public class MpesaUtils {
                 }
             }
         }
+        if (properties != null && !properties.getName().equals(this.processAMS)) {
+            logger.error("MPESA properties mismatch for transaction {}. Selected AMS is {} while the process AMS is {}. Groups are {}",
+                this.processTxnId, properties.getName(), this.processAMS, groups);
+        }
         return properties;
     }
 
-    public void setProcess(String process) {
-        logger.info("Process Value being set");
+    public void setProcess(String process, String transactionId) {
         this.process = process;
+        logger.info("Process {} set for transaction {}", this.process, transactionId);
     }
 
     public static String maskString(String strText) {
@@ -297,6 +304,12 @@ public class MpesaUtils {
     public static void main(String[] args) {
         String dt = "254708374149";
         System.out.println(maskString(dt));
+    }
+
+    public void setProcessAMS(String processAMS, String transactionId) {
+        this.processAMS = processAMS;
+        this.processTxnId = transactionId;
+        logger.info("ProcessAMS {} set for transaction {}. Process is {}", this.processAMS, this.processTxnId, this.process);
     }
 
 }
