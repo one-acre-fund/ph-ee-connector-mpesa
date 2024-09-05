@@ -57,6 +57,7 @@ public class TransactionStateWorker {
 
                     Map<String, Object> variables = job.getVariablesAsMap();
                     String transactionId = (String) variables.get(TRANSACTION_ID);
+                    String ams = (String) variables.get(AMS);
                     if(skipMpesa){
                         logger.info("Skipping MPESA for transaction with id {}", transactionId);
                         Exchange exchange = new DefaultExchange(camelContext);
@@ -83,7 +84,7 @@ public class TransactionStateWorker {
                         TransactionChannelC2BRequestDTO channelRequest = objectMapper.readValue(
                                 (String) variables.get("mpesaChannelRequest"), TransactionChannelC2BRequestDTO.class);
                         BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = safaricomUtils.channelRequestConvertor(
-                                channelRequest);
+                                channelRequest, transactionId, ams);
                         Exchange exchange = new DefaultExchange(camelContext);
                         exchange.setProperty(CORRELATION_ID, variables.get("transactionId"));
                         exchange.setProperty(TRANSACTION_ID, variables.get("transactionId"));

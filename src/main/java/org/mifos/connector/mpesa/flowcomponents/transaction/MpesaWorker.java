@@ -84,10 +84,8 @@ public class MpesaWorker {
                     logger.info("Time diff " + (t2 - t1));
 
                     Map<String, Object> variables = job.getVariablesAsMap();
+                    mpesaUtils.setProcess(job.getBpmnProcessId());
                     String transactionId = (String) variables.get(TRANSACTION_ID);
-                    mpesaUtils.setProcess(job.getBpmnProcessId(), transactionId);
-                    String processAMS = (String) variables.get(AMS);
-                    mpesaUtils.setProcessAMS(processAMS, transactionId);
                     if (skipMpesa) {
                         logger.info("Skipping MPESA for transaction with id {}", transactionId);
                         Exchange exchange = new DefaultExchange(camelContext);
@@ -98,14 +96,15 @@ public class MpesaWorker {
                     } else {
                         TransactionChannelC2BRequestDTO channelRequest = objectMapper.readValue(
                                 (String) variables.get("mpesaChannelRequest"), TransactionChannelC2BRequestDTO.class);
-
+                        String ams = (String) variables.get(AMS);
                         BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = safaricomUtils.channelRequestConvertor(
-                                channelRequest);
+                                channelRequest, transactionId, ams);
                         logger.info(buyGoodsPaymentRequestDTO.toString());
                         Exchange exchange = new DefaultExchange(camelContext);
                         exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO);
                         exchange.setProperty(CORRELATION_ID, transactionId);
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
+                        exchange.setProperty(AMS, ams);
 
                         variables.put(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO.toString());
 

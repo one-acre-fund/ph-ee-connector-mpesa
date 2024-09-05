@@ -3,6 +3,7 @@
 ## Version 1.3.1
 
         * [SER-2964] - Set up and Capture Logs on the MPESA Connecter to check on mix up of payments between PAYGOPS and ERPLY
+        * [SER-3089] - Fix payments mix up in the mpesa connector due to wrong selection of AMS TILL number
 
 ## Version 1.3.0
 

@@ -49,9 +49,6 @@ public class MpesaUtils {
     @Value("${fineract.host}")
     private String fineractHost;
 
-    private String processAMS;
-    private String processTxnId;
-
     enum ams {
         paygops,
         roster,
@@ -265,16 +262,11 @@ public class MpesaUtils {
                 }
             }
         }
-        if (properties != null && !properties.getName().equals(this.processAMS)) {
-            logger.error("MPESA properties mismatch for transaction {}. Selected AMS is {} while the process AMS is {}. Groups are {}",
-                this.processTxnId, properties.getName(), this.processAMS, groups);
-        }
         return properties;
     }
 
-    public void setProcess(String process, String transactionId) {
+    public void setProcess(String process) {
         this.process = process;
-        logger.info("Process {} set for transaction {}", this.process, transactionId);
     }
 
     public static String maskString(String strText) {
@@ -306,10 +298,32 @@ public class MpesaUtils {
         System.out.println(maskString(dt));
     }
 
-    public void setProcessAMS(String processAMS, String transactionId) {
-        this.processAMS = processAMS;
-        this.processTxnId = transactionId;
-        logger.info("ProcessAMS {} set for transaction {}. Process is {}", this.processAMS, this.processTxnId, this.process);
+    /**
+     * Get the MPESA properties for the given AMS
+     * @param ams the AMS name
+     * @param transactionId the ID of the current transaction
+     * @return the MPESA properties for the given AMS
+     */
+    public MpesaProps.MPESA getMpesaProperties(String ams, String transactionId) {
+        MpesaProps.MPESA properties = null;
+        List<MpesaProps.MPESA> groups = getGroup();
+        for (MpesaProps.MPESA identifier : groups) {
+            String name = identifier.getName();
+            if (name.equalsIgnoreCase(ams)) {
+                properties = identifier;
+                break;
+
+            } else {
+                if (name.equals("default")) {
+                    properties = identifier;
+                }
+            }
+        }
+        if (properties != null && !properties.getName().equalsIgnoreCase(ams)) {
+            logger.warn("MPESA properties mismatch for transaction {}. Selected AMS is {} while the process AMS is {}. Groups are {}",
+                transactionId, properties.getName(), ams, groups);
+        }
+        return properties;
     }
 
 }

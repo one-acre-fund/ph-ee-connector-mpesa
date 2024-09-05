@@ -333,9 +333,11 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .setHeader("Content-Type", constant("application/json"))
                 .setHeader("Authorization", simple("Bearer ${exchangeProperty."+ACCESS_TOKEN+"}"))
                 .setBody(exchange -> {
-                    mpesaProps = mpesaUtils.setMpesaProperties();
+                    String ams = exchange.getProperty(AMS, String.class);
+                    String transactionId = exchange.getProperty(CORRELATION_ID, String.class);
+                    mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
                     logger.info("MPESA properties for transaction with id {}: AMS - {}, Shortcode - {}, TILL - {}",
-                        exchange.getProperty(CORRELATION_ID), mpesaProps.getName(), mpesaProps.getBusinessShortCode(), mpesaProps.getTill());
+                        transactionId, mpesaProps.getName(), mpesaProps.getBusinessShortCode(), mpesaProps.getTill());
                     exchange.setProperty(PARTY_LOOKUP_FSP_ID, mpesaProps.getTill());
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
@@ -347,7 +349,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     buyGoodsPaymentRequestDTO.setPassword(password);
                     buyGoodsPaymentRequestDTO.setTransactionType(MPESA_BUY_GOODS_TRANSACTION_TYPE);
 
-                    logger.info("Buy goods request body for transaction with id {} on {}: \n\n..\n\n..\n\n.. {}", exchange.getProperty(CORRELATION_ID),
+                    logger.info("Buy goods request body for transaction with id {} on {}: \n\n..\n\n..\n\n.. {}", transactionId,
                         Instant.now(), buyGoodsPaymentRequestDTO);
                     logger.info(MpesaUtils.maskString(accessTokenStore.getAccessToken()));
 
