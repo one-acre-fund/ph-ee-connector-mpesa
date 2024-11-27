@@ -2,6 +2,7 @@
 
 ## Version 1.3.2
 
+        * [SER-3095] - Fix exception that gets thrown after a callback request has been processed
         * [SER-3220] - Update actuator endpoints
 
 ## Version 1.3.1
