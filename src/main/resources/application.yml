@@ -120,6 +120,10 @@ paybill:
       currency: ${ACCOUNTS_FINERACT_CURRENCY:KES}
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
   endpoint:
     health:
       probes:
