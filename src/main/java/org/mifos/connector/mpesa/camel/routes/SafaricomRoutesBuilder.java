@@ -114,7 +114,12 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .setProperty(CALLBACK_DATETIME, simple(Instant.now().toString()))
                 .log(LoggingLevel.INFO, "Callback body \n\n..\n\n..\n\n.. ${body}")
                 .unmarshal().json(JsonLibrary.Jackson, JsonObject.class)
-                .to("direct:callback-handler");
+                .to("direct:callback-handler")
+                .choice()
+                    .when(simple("${header.CamelHttpResponseCode} == null"))
+                        .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(202))
+                        .setBody(constant(""))
+                .end();
 
 
         from("direct:callback-handler")

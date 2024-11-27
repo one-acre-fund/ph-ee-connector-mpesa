@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.2
+
+        * [SER-3095] - Fix exception that gets thrown after a callback request has been processed
+
 ## Version 1.3.1
 
         * [SER-2964] - Set up and Capture Logs on the MPESA Connecter to check on mix up of payments between PAYGOPS and ERPLY
