@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.3
+
+        * [SER-2918] - Add unit tests
+
 ## Version 1.3.2
 
         * [SER-3095] - Fix exception that gets thrown after a callback request has been processed
