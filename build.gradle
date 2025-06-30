@@ -81,26 +81,26 @@ tasks.test {
     finalizedBy jacocoTestReport
 }
 
-tasks.jacocoTestReport {
+tasks.named('jacocoTestReport') {
     dependsOn test
     reports {
-        xml.required = true
-        html.required = true
-        xml.outputLocation = file("${buildDir}/jacoco/testCoverage.xml")
-        html.outputLocation = file("${buildDir}/reports/jacoco/test")
+        xml.required.set(true)
+        html.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+        html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco/test"))
     }
 }
 
-sonar {
+sonarqube {
     properties {
-        property("sonar.projectKey", "one-acre-fund_ph-ee-connector-mpesa")
-        property("sonar.organization", "one-acre-fund")
-        property("sonar.token", System.getenv("SONAR_TOKEN"))
-        property("sonar.host.url", "https://sonarcloud.io")
-        property("sonar.projectBaseDir", "${project.projectDir}")
-        property("sonar.java.binaries", "${project.projectDir}/build/classes/java/main")
-        property("sonar.coverage.jacoco.xmlReportPaths", "$buildDir/reports/jacoco/test/jacocoTestReport.xml")
-        property("sonar.newCode.period", "previous_version")
-        property("sonar.newCode.referenceBranch", "main")
+        property "sonar.projectKey", "one-acre-fund_ph-ee-connector-mpesa"
+        property "sonar.organization", "one-acre-fund"
+        property "sonar.token", System.getenv("SONAR_TOKEN")
+        property "sonar.host.url", "https://sonarcloud.io"
+        property "sonar.projectBaseDir", "${project.projectDir}"
+        property "sonar.java.binaries", layout.buildDirectory.dir("classes/java/main").get().asFile.absolutePath
+        property "sonar.coverage.jacoco.xmlReportPaths", layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml").get().asFile.absolutePath
+        property "sonar.newCode.period", "previous_version"
+        property "sonar.newCode.referenceBranch", "main"
     }
 }
