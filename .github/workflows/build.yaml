@@ -1,8 +1,6 @@
 ---
 name: ph-ee-connector-mpesa
 run-name: ph-ee-connector-mpesa-${{ github.ref_name }}-${{ github.run_number }}
-permissions:
-  contents: read
 
 on:
   push:
@@ -144,7 +142,7 @@ jobs:
 
       - name: Gradlew test
         run: |
-          ./gradlew :test --info --build-cache
+          ./gradlew test jacocoTestReport --info --build-cache
 
       - name: SonarCloud analysis
         env:
