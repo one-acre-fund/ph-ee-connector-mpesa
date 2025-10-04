@@ -1,6 +1,8 @@
 # MegaLinter GitHub Action configuration file
 # More info at https://megalinter.github.io
 name: Lint with Mega-linter
+permissions:
+  contents: read
 
 on:
   # Trigger mega-linter at every push. Action will also be visible from Pull Requests to main
@@ -26,7 +28,7 @@ jobs:
     steps:
       # Git Checkout
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4.3.0
         with:
           token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
           fetch-depth: 0 # If you use VALIDATE_ALL_CODEBASE = true, you can remove this line to improve performances
@@ -48,7 +50,7 @@ jobs:
       # Upload MegaLinter artifacts
       - name: Archive production artifacts
         if: ${{ success() }} || ${{ failure() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: MegaLinter reports
           path: |
