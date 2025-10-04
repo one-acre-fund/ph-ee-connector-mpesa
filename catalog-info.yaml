@@ -1,7 +1,7 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: PH Mpesa Connector
+  name: ph-ee-connector-mpesa
   title: PH Mpesa Connector
   description: A microservice that integrates with the M-Pesa API to facilitate mobile money transactions for loan repayments
   annotations:
