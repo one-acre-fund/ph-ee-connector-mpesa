@@ -24,15 +24,19 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.camel.Exchange.HTTP_RESPONSE_CODE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ACCOUNT_HOLDING_INSTITUTION_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.AMS_NAME;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CHANNEL_REQUEST;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CLIENT_CORRELATION_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CONTENT_TYPE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CONTENT_TYPE_VAL;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.CORRELATION_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CUSTOM_HEADER_FILTER_STRATEGY;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.TENANT_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.TRANSACTION_ID;
+import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.INITIATOR_FSP_ID;
+import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.SERVER_TRANSACTION_RECEIPT_NUMBER;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSFER_CREATE_FAILED;
 
 @Component
@@ -60,7 +64,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                 .log(LoggingLevel.INFO, "## Paybill validation request")
                 .to("direct:account-status")
                 .unmarshal().json(JsonLibrary.Jackson, PaybillResponseDTO.class)
-                .log("${body.isReconciled}")
+                .log("Paybill validation response for transaction ID ${exchangeProperty.transactionId}: ${body}")
                 .choice()
                     .when().simple("${body.isReconciled} == 'true'")
                         .to("direct:start-paybill-workflow")
@@ -82,7 +86,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     String mpesaTxnId = paybillResponseDTO.getTransactionId();
                     String clientCorrelationId = mpesaTxnId;
                     reconciledStore.put(clientCorrelationId, reconciled);
-                    GsmaTransfer gsmaTransfer = mpesaUtils.createGsmaTransferDTO(paybillResponseDTO,clientCorrelationId);
+                    String businessShortCode = e.getProperty(INITIATOR_FSP_ID, String.class);
+                    GsmaTransfer gsmaTransfer = mpesaUtils.createGsmaTransferDTO(paybillResponseDTO, clientCorrelationId, businessShortCode);
                     e.getIn().removeHeaders("*");
                     e.getIn().setHeader(ACCOUNT_HOLDING_INSTITUTION_ID, paybillResponseDTO.getAccountHoldingInstitutionId());
                     e.getIn().setHeader(AMS_NAME, paybillResponseDTO.getAmsName());
@@ -104,7 +109,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
         from("direct:account-status")
                 .id("account-status-channel")
                 .unmarshal().json(JsonLibrary.Jackson, PaybillRequestDTO.class)
-                .log(LoggingLevel.INFO, "Paybill Validation Payload")
+                .log(LoggingLevel.INFO, "Paybill Validation request received with transaction ID ${body.transactionID}, body: ${body} ")
+                .setProperty(TRANSACTION_ID, simple("${body.transactionID}"))
                 .setBody(exchange -> {
                     PaybillRequestDTO paybillRequestDTO = exchange.getIn().getBody(PaybillRequestDTO.class);
                     //Getting the ams name
@@ -121,6 +127,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     exchange.setProperty("channelUrl", channelUrl);
                     exchange.setProperty("secondaryIdentifier", secondaryIdentifierName);
                     exchange.setProperty("secondaryIdentifierValue", paybillRequestDTO.getMsisdn());
+                    exchange.setProperty(INITIATOR_FSP_ID, businessShortCode);
                     ChannelRequestDTO obj = MpesaUtils.convertPaybillPayloadToChannelPayload(paybillRequestDTO, amsName, currency);
                     logger.debug("Header:{}", exchange.getIn().getHeaders());
                     try {
@@ -170,7 +177,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
         from("rest:POST:/confirmation")
                 .id("mpesa-confirmation")
                 .unmarshal().json(JsonLibrary.Jackson, PaybillRequestDTO.class)
-                .log(LoggingLevel.INFO, "Setting zeebe variable for confirmation")
+                .log(LoggingLevel.INFO, "Confirmation request received with transaction ID ${body.transactionID}, body: ${body} ")
                 .process(e -> {
                     PaybillRequestDTO paybillConfirmationRequestDTO = e.getIn().getBody(PaybillRequestDTO.class);
                     e.setProperty("mpesaTransactionId", paybillConfirmationRequestDTO.getTransactionID());
@@ -196,12 +203,13 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     variables.put(CHANNEL_REQUEST, obj.toString());
                     variables.put("amount", paybillConfirmationRequestDTO.getTransactionAmount());
                     variables.put("accountId", paybillConfirmationRequestDTO.getBillRefNo());
-                    variables.put("originDate", Long.parseLong(paybillConfirmationRequestDTO.getTransactionTime()));
                     variables.put("phoneNumber", paybillConfirmationRequestDTO.getMsisdn());
                     variables.put("mpesaTransactionId", mpesaTransactionId);
-                    variables.put(TRANSACTION_ID, transactionId);
+                    variables.put(TRANSACTION_ID, mpesaTransactionId);
                     variables.put(TRANSFER_CREATE_FAILED, false);
-                    logger.info("Workflow transaction id : {}", transactionId);
+                    variables.put(SERVER_TRANSACTION_RECEIPT_NUMBER, mpesaTransactionId);
+                    variables.put(CORRELATION_ID, transactionId);
+                    logger.info("Workflow transaction id: {} for mpesa transaction id: {}", transactionId, mpesaTransactionId);
 
                     if (transactionId != null) {
                         zeebeClient.newPublishMessageCommand()
@@ -214,6 +222,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     } else {
                         logger.debug("No workflow of such transaction ID exists");
                     }
-                });
+                })
+                .setHeader(HTTP_RESPONSE_CODE, constant(202))
+                .setBody(constant(""));
     }
 }

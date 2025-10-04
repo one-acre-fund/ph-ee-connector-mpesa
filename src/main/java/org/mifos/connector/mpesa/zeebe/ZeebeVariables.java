@@ -18,4 +18,7 @@ public class ZeebeVariables {
     public static final String TRANSFER_RESPONSE_CREATE = "transferResponse-CREATE";
     public static final String TRANSFER_CREATE_FAILED = "transferCreateFailed";
     public static final String TIMER = "timer";
+    public static final String INITIATOR_FSP_ID = "initiatorFspId";
+    public static final String PARTY_LOOKUP_FSP_ID = "partyLookupFspId";
+    public static final String AMS = "ams";
 }

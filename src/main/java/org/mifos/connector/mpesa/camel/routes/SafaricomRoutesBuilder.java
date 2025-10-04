@@ -23,6 +23,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.*;
 import static org.mifos.connector.mpesa.safaricom.config.SafaricomProperties.MPESA_BUY_GOODS_TRANSACTION_TYPE;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.*;
@@ -108,9 +111,15 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
          */
         from("rest:POST:/buygoods/callback")
                 .id("buy-goods-callback")
+                .setProperty(CALLBACK_DATETIME, simple(Instant.now().toString()))
                 .log(LoggingLevel.INFO, "Callback body \n\n..\n\n..\n\n.. ${body}")
                 .unmarshal().json(JsonLibrary.Jackson, JsonObject.class)
-                .to("direct:callback-handler");
+                .to("direct:callback-handler")
+                .choice()
+                    .when(simple("${header.CamelHttpResponseCode} == null"))
+                        .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(202))
+                        .setBody(constant(""))
+                .end();
 
 
         from("direct:callback-handler")
@@ -121,6 +130,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     StkCallback callback = SafaricomUtils.getStkCallback(response);
                     String checkoutRequestId = callback.getCheckoutRequestId();
                     String clientCorrelationId = correlationIDStore.getClientCorrelation(checkoutRequestId);
+                    logger.info("Callback for checkout ID {} received on {} with request body {}. Correlation ID found: {}", callback.getCheckoutRequestId(),
+                        exchange.getProperty(CALLBACK_DATETIME), exchange.getIn().getBody(String.class), clientCorrelationId);
                     exchange.setProperty(TRANSACTION_ID, clientCorrelationId);
                     exchange.setProperty(SERVER_TRANSACTION_ID, checkoutRequestId);
                     logger.info("\n\n StkCallback " + callback + "\n");
@@ -184,14 +195,13 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
          */
         from("direct:buy-goods-base")
                 .id("buy-goods-base")
-                .log(LoggingLevel.INFO, "Starting buy goods flow")
-                .log(LoggingLevel.INFO, "Starting buy goods flow with retry count: " + maxRetryCount)
+                .log(LoggingLevel.INFO, "Starting buy goods flow for transaction ${exchangeProperty." + CORRELATION_ID + "} with max retry count: " + maxRetryCount)
                 .to("direct:get-access-token")
                 .process(exchange -> exchange.setProperty(ACCESS_TOKEN, accessTokenStore.getAccessToken()))
-                .log(LoggingLevel.INFO, "Got access token, moving on to API call.")
+                .log(LoggingLevel.INFO, "Got access token for transaction ${exchangeProperty." + CORRELATION_ID + "}, moving on to buy goods API call.")
                 .to("direct:lipana-buy-goods")
-                .log(LoggingLevel.INFO, "Status: ${header.CamelHttpResponseCode}")
-                .log(LoggingLevel.INFO, "Transaction API response: ${body}")
+                .log(LoggingLevel.INFO, "Received buy goods API response for transaction ${exchangeProperty." + CORRELATION_ID + "} on ${header.Date} with status: ${header.CamelHttpResponseCode}")
+                .log(LoggingLevel.INFO, "Buy goods API response body for transaction ${exchangeProperty." + CORRELATION_ID + "}: ${body}")
                 .to("direct:transaction-response-handler");
 
         /*
@@ -202,15 +212,15 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
          */
         from("direct:get-transaction-status-base")
                 .id("buy-goods-get-transaction-status-base")
-                .log(LoggingLevel.INFO, "Starting buy goods transaction status flow")
+                .log(LoggingLevel.INFO, "Starting buy goods transaction status flow for transaction ${exchangeProperty." + TRANSACTION_ID + "}")
                 .choice()
                 .when(exchangeProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT).isLessThanOrEqualTo(maxRetryCount))
                 .to("direct:get-access-token")
                 .process(exchange -> exchange.setProperty(ACCESS_TOKEN, accessTokenStore.getAccessToken()))
-                .log(LoggingLevel.INFO, "Got access token, moving on to API call.")
+                .log(LoggingLevel.INFO, "Got access token for transaction ${exchangeProperty." + TRANSACTION_ID + "}, moving on to transaction status API call.")
                 .to("direct:lipana-transaction-status")
-                .log(LoggingLevel.INFO, "Status: ${header.CamelHttpResponseCode}")
-                .log(LoggingLevel.INFO, "Transaction API response: ${body}")
+                .log(LoggingLevel.INFO, "Received status enquiry API response for transaction ${exchangeProperty." + TRANSACTION_ID + "} on ${header.Date} with response status: ${header.CamelHttpResponseCode}")
+                .log(LoggingLevel.INFO, "Transaction status API response body for transaction ${exchangeProperty." + TRANSACTION_ID + "}: ${body}")
                 .to("direct:transaction-status-response-handler")
                 .otherwise()
                 .process(exchange -> {
@@ -235,10 +245,12 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     String server_id = jsonObject.getString("CheckoutRequestID");
                     String resultCode = jsonObject.getString("ResultCode");
                     String resultDescription = jsonObject.getString("ResultDesc");
+                    String receiptNumber = jsonObject.getString(MPESA_RECEIPT_NUMBER);
                     Object correlationId = exchange.getProperty(CORRELATION_ID);
 
                     if(resultCode.equals("0")) {
                         exchange.setProperty(TRANSACTION_FAILED, false);
+                        exchange.setProperty(SERVER_TRANSACTION_RECEIPT_NUMBER, receiptNumber);
                     } else {
                         exchange.setProperty(ERROR_CODE, resultCode);
                         exchange.setProperty(ERROR_INFORMATION, exchange.getIn().getBody(String.class));
@@ -326,10 +338,12 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .setHeader("Content-Type", constant("application/json"))
                 .setHeader("Authorization", simple("Bearer ${exchangeProperty."+ACCESS_TOKEN+"}"))
                 .setBody(exchange -> {
-                    mpesaProps = mpesaUtils.setMpesaProperties();
-                    logger.info("AMS Name in Route " + mpesaProps.getName());
-                    logger.info("Values from safaricome routebuilder: Shortcode - " + mpesaProps.getBusinessShortCode() + " Till -" +
-                            mpesaProps.getTill());
+                    String ams = exchange.getProperty(AMS, String.class);
+                    String transactionId = exchange.getProperty(CORRELATION_ID, String.class);
+                    mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
+                    logger.info("MPESA properties for transaction with id {}: AMS - {}, Shortcode - {}, TILL - {}",
+                        transactionId, mpesaProps.getName(), mpesaProps.getBusinessShortCode(), mpesaProps.getTill());
+                    exchange.setProperty(PARTY_LOOKUP_FSP_ID, mpesaProps.getTill());
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
 
@@ -340,7 +354,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     buyGoodsPaymentRequestDTO.setPassword(password);
                     buyGoodsPaymentRequestDTO.setTransactionType(MPESA_BUY_GOODS_TRANSACTION_TYPE);
 
-                    logger.info("BUY GOODS BODY: \n\n..\n\n..\n\n.. " + buyGoodsPaymentRequestDTO);
+                    logger.info("Buy goods request body for transaction with id {} on {}: \n\n..\n\n..\n\n.. {}", transactionId,
+                        Instant.now(), buyGoodsPaymentRequestDTO);
                     logger.info(MpesaUtils.maskString(accessTokenStore.getAccessToken()));
 
                     return buyGoodsPaymentRequestDTO;
@@ -377,7 +392,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     ));
 
 
-                    logger.info("TRANSACTION STATUS REQUEST DTO \n\n..\n\n..\n\n.." + transactionStatusRequestDTO);
+                    logger.info("Transaction status request DTO for transaction with id {} sent on {} \n\n..\n\n..\n\n.. {}", 
+                        exchange.getProperty(TRANSACTION_ID), Instant.now(), transactionStatusRequestDTO);
                     return  transactionStatusRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)

@@ -40,4 +40,8 @@ public class CamelProperties {
     public static final String MPESA_TXN_ID = "mpesaTxnId";
     public static final String CLIENT_CORRELATION_ID = "X-CorrelationID";
     public static final String ACCOUNT_HOLDING_INSTITUTION_ID = "accountHoldingInstitutionId";
+    public static final String MPESA_RECEIPT_NUMBER = "MpesaReceiptNumber";
+    public static final String FINERACT_AMS_NAME = "fineract";
+    public static final String FINERACT_AMS_IDENTIFIER = "FINERACTACCOUNTID";
+    public static final String CALLBACK_DATETIME = "callbackDateTime";
 }

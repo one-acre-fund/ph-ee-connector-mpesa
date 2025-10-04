@@ -28,6 +28,8 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_DESCR
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_API_RESPONSE;
 import static org.mifos.connector.mpesa.camel.routes.PaybillRoute.workflowInstanceStore;
+import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.AMS;
+import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.PARTY_LOOKUP_FSP_ID;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.SERVER_TRANSACTION_ID;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSACTION_FAILED;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSACTION_ID;
@@ -72,7 +74,8 @@ public class MpesaWorker {
         zeebeClient.newWorker()
                 .jobType("init-transfer")
                 .handler((client, job) -> {
-                    logger.info("Job '{}' started from process '{}' with key {}", job.getType(), job.getBpmnProcessId(), job.getKey());
+                    logger.info("Job '{}' started from process '{}' with key {} and workflow instance key {}",
+                        job.getType(), job.getBpmnProcessId(), job.getKey(), job.getProcessInstanceKey());
                     long t1 = System.currentTimeMillis();
                     logger.info("Going to sleep at " + t1 + " for " + initTransferWaitTimer + " seconds");
                     ZeebeUtils.sleep(initTransferWaitTimer);
@@ -82,8 +85,9 @@ public class MpesaWorker {
 
                     Map<String, Object> variables = job.getVariablesAsMap();
                     mpesaUtils.setProcess(job.getBpmnProcessId());
+                    String transactionId = (String) variables.get(TRANSACTION_ID);
                     if (skipMpesa) {
-                        logger.info("Skipping MPESA");
+                        logger.info("Skipping MPESA for transaction with id {}", transactionId);
                         Exchange exchange = new DefaultExchange(camelContext);
                         String serverTransactionId = exchange.getProperty(SERVER_TRANSACTION_ID, String.class);
                         variables.put(TRANSACTION_FAILED, false);
@@ -92,20 +96,21 @@ public class MpesaWorker {
                     } else {
                         TransactionChannelC2BRequestDTO channelRequest = objectMapper.readValue(
                                 (String) variables.get("mpesaChannelRequest"), TransactionChannelC2BRequestDTO.class);
-                        String transactionId = (String) variables.get(TRANSACTION_ID);
-
+                        String ams = (String) variables.get(AMS);
                         BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = safaricomUtils.channelRequestConvertor(
-                                channelRequest);
+                                channelRequest, transactionId, ams);
                         logger.info(buyGoodsPaymentRequestDTO.toString());
                         Exchange exchange = new DefaultExchange(camelContext);
                         exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO);
                         exchange.setProperty(CORRELATION_ID, transactionId);
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
+                        exchange.setProperty(AMS, ams);
 
                         variables.put(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO.toString());
 
                         producerTemplate.send("direct:buy-goods-base", exchange);
                         variables.put(MPESA_API_RESPONSE, exchange.getProperty(MPESA_API_RESPONSE));
+                        variables.put(PARTY_LOOKUP_FSP_ID, exchange.getProperty(PARTY_LOOKUP_FSP_ID));
 
                         boolean isTransactionFailed = exchange.getProperty(TRANSACTION_FAILED, boolean.class);
                         if (isTransactionFailed) {

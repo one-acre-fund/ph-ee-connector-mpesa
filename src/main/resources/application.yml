@@ -27,6 +27,8 @@ paygops:
   host: "http://localhost:5002"
 roster:
   host: "http://localhost:5004"
+fineract:
+  host: "http://localhost:5005"
 
 operations:
   host: http://ph-ee-operations-app
@@ -38,7 +40,7 @@ mpesa:
   api:
     timeout: 60000
     lipana: /mpesa/stkpush/v1/processrequest
-    transaction-status: /mpesa/stkpushquery/v1/query
+    transaction-status: /mpesa/stkpushquery/v2/query
   local:
     host: http://localhost:5000
     transaction-callback: /buygoods/callback
@@ -79,6 +81,22 @@ accounts:
       client-secret: ${ACCOUNTS_ERPLY_CLIENTSECRET:YzuGNoJxeub8ZC6d}
       api-host: ${ACCOUNTS_ERPLY_APIHOST:https://sandbox.safaricom.co.ke}
       pass-key: ${ACCOUNTS_ERPLY_PASSKEY:bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919}
+    - name: "fineract"
+      business-short-code: ${ACCOUNTS_FINERACT_SHORTCODE:122344567}
+      till: ${ACCOUNTS_FINERACT_TILL:1234567}
+      auth-host: ${ACCOUNTS_FINERACT_AUTHHOST:https://sandbox.safaricom.co.ke/oauth/v1/generate}
+      client-key: ${ACCOUNTS_FINERACT_CLIENTKEY:0pLxbN83FrOl5Nd0Fh9Zi5BQlMxSL2n5}
+      client-secret: ${ACCOUNTS_FINERACT_CLIENTSECRET:YzuGNoJxeub8ZC6d}
+      api-host: ${ACCOUNTS_FINERACT_APIHOST:https://sandbox.safaricom.co.ke}
+      pass-key: ${ACCOUNTS_FINERACT_PASSKEY:bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919}
+    - name: "odoo"
+      business-short-code: ${ACCOUNTS_ODOO_SHORTCODE:122344567}
+      till: ${ACCOUNTS_ODOO_TILL:1234567}
+      auth-host: ${ACCOUNTS_ODOO_AUTHHOST:https://sandbox.safaricom.co.ke/oauth/v1/generate}
+      client-key: ${ACCOUNTS_ODOO_CLIENTKEY:0pLxbN83FrOl5Nd0Fh9Zi5BQlMxSL2n5}
+      client-secret: ${ACCOUNTS_ODOO_CLIENTSECRET:YzuGNoJxeub8ZC6d}
+      api-host: ${ACCOUNTS_ODOO_APIHOST:https://sandbox.safaricom.co.ke}
+      pass-key: ${ACCOUNTS_ODOO_PASSKEY:bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919}
     - name: "default"
       business-short-code: ${ACCOUNTS_ROSTER_SHORTCODE:9383028}
       till: ${ACCOUNTS_ROSTER_TILL:1234567}
@@ -89,7 +107,7 @@ accounts:
       pass-key: ${ACCOUNTS_ROSTER_PASSKEY:bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919}
 
 paybill:
-  accountHoldingInstitutionId: "default"
+  accountHoldingInstitutionId: "oaf"
   groups:
     - business-short-code: ${ACCOUNTS_PAYGOPS_PAYBILL_SHORTCODE:24322607}
       ams: "paygops"
@@ -97,8 +115,15 @@ paybill:
     - business-short-code: ${ACCOUNTS_ROSTER_PAYBILL_SHORTCODE:12345678}
       ams: "roster"
       currency: ${ACCOUNTS_ROSTER_CURRENCY:KES}
+    - business-short-code: ${ACCOUNTS_FINERACT_PAYBILL_SHORTCODE:87654321}
+      ams: "fineract"
+      currency: ${ACCOUNTS_FINERACT_CURRENCY:KES}
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
   endpoint:
     health:
       probes:
