@@ -3,6 +3,7 @@
 ## Version 1.3.3
 
         * [SER-2918] - Add unit tests
+        * [CP-3757] - Switch CI to GitHub Actions
 
 ## Version 1.3.2
 

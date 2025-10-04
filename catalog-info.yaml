@@ -1,0 +1,55 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: PH Mpesa Connector
+  title: PH Mpesa Connector
+  description: A microservice that integrates with the M-Pesa API to facilitate mobile money transactions for loan repayments
+  annotations:
+    github.com/project-slug: one-acre-fund/ph-ee-connector-mpesa
+    backstage.io/techdocs-ref: dir:.
+    sonarqube.org/project-key: one-acre-fund_ph-ee-connector-mpesa
+    dev.azure.com/project-repo: OAFDev/prd-pipelines
+    backstage.io/code-coverage: sonarqube
+  tags:
+    - microfinance
+    - financial-services
+    - payments
+    - paymenthub
+    - mpesa
+    - safaricom
+    - mobile-money
+    - api
+    - java
+    - spring-boot
+    - one-acre-fund
+  links:
+    - url:
+      title: API Documentation
+      icon: docs
+    - url: https://sonarcloud.io/summary/new_code?id=one-acre-fund_ph-ee-connector-mpesa
+      title: Code Quality Dashboard
+      icon: dashboard
+    - url:
+      title: Build Pipeline
+      icon: build
+    - url:
+      title: Docker Images
+      icon: docker
+    - url:
+      title: APM Monitoring
+      icon: apm
+    - url:
+      title: Ingress Logs
+      icon: logs
+    - url:
+      title: Stability Dashboard
+      icon: dashboard
+    - url: https://ph-web.oneacrefund.org
+      title: Production Environment
+      icon: globe
+spec:
+  type: service
+  lifecycle: production
+  owner: team-credit-and-payments
+  system: paymenthub
+  consumesApis: []
