@@ -36,22 +36,6 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
-    - name: Set up Python
-      uses: actions/setup-python@v5.6.0
-      with:
-        python-version: '3.x'
-
-    - name: Upload package
-      uses: actions/upload-artifact@v4.6.2
-      with:
-        name: python-package
-        path: dist/
-    
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
-      with:
-        languages: 'java'
-
     - name: Set up Java Version
       uses: actions/setup-java@v4.7.0
       with:
@@ -89,9 +73,6 @@ jobs:
     - name: Gradlew build
       run: |
         ./gradlew bootJar --info --build-cache
-
-    - name: CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
 
     - name: Login to Azure Container Registry
       uses: docker/login-action@v3.5.0
