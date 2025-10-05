@@ -83,12 +83,12 @@ jobs:
         password: ${{ secrets.ACR_PULL_PASSWORD }}
 
     - name: Build Docker image
-      run: docker build . -t oaftech.azurecr.io/oneacrefund/ph-ee-connector-mpesa:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+      run: docker build . -t oaftech.azurecr.io/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
 
     - name: Push image to registry
       if: ${{ env.SHOULD_PUBLISH == 'true'}}
       run: |
-        docker push ${{ vars.ACR_REGISTRY }}/oneacrefund/ph-ee-connector-mpesa:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+        docker push ${{ vars.ACR_REGISTRY }}/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
 
   Sonarcloud:
     name: Sonar Analysis
@@ -134,4 +134,4 @@ jobs:
         uses: actions/upload-artifact@v4.6.0
         with:
           name: test-results
-          path: ${{ github.workspace }}/fineract-provider/build/reports/jacoco/test/jacocoTestReport.xml
+          path: ${{ github.workspace }}/build/reports/jacoco/test/jacocoTestReport.xml
