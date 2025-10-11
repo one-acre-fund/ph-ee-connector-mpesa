@@ -1,0 +1,137 @@
+---
+name: ph-ee-connector-mpesa
+run-name: ph-ee-connector-mpesa-${{ github.ref_name }}-${{ github.run_number }}
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - release/*
+      - hotfix/*
+    paths-ignore:
+      - "catalog-info.yaml"
+
+  pull_request:
+    branches:
+      - main
+      - develop
+      - release/*
+      - hotfix/*
+    paths-ignore:
+      - "catalog-info.yaml"
+
+env:
+  SHOULD_PUBLISH: ${{ (github.ref  == 'refs/heads/main' ||  github.ref == 'refs/heads/develop' || startsWith(github.ref , 'refs/heads/release') || startsWith(github.ref, 'refs/heads/hotfix')) && github.event_name != 'schedule' }}
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    outputs:
+      PH_EE_CONNECTOR_MPESA_IMAGE_TAG: ${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+    steps:
+    - name: Check out source code
+      uses: actions/checkout@v4.2.2
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up Java Version
+      uses: actions/setup-java@v4.7.0
+      with:
+        java-version: "17"
+        distribution: "temurin"
+        
+    - name: Get Revision
+      run: echo "REVISION=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+    - name: Get Revision and Set Image Tag
+      id: set-image-tag
+      run: |
+        VERSION_TAG=$(./gradlew -q printVersion)
+        echo "VERSION_TAG=$VERSION_TAG"
+        
+        IMAGE_TAG="${VERSION_TAG}.$(date '+%Y.%m.%d').${{ github.run_number }}"
+        if [[ "${{ env.SHOULD_PUBLISH }}" == 'true' ]]; then
+          IMAGE_TAG="$VERSION_TAG"
+        fi
+        echo "IMAGE_SEMANTIC_HASH=$IMAGE_TAG"
+        echo "Tags: $IMAGE_TAG"
+
+        echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "IMAGE_SEMANTIC_HASH=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "GRADLE_USER_HOME=${HOME}/.gradle" >> $GITHUB_OUTPUT
+
+    - name: Configure Gradle caching
+      uses: actions/cache@v4.2.4
+      with:
+        path: ~/.gradle/caches
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+        restore-keys: ${{ runner.os }}-gradle
+
+    - name: Gradlew build
+      run: |
+        ./gradlew bootJar --info --build-cache
+
+    - name: Login to Azure Container Registry
+      uses: docker/login-action@v3.5.0
+      if: ${{ env.SHOULD_PUBLISH == 'true'}}
+      with:
+        registry: ${{ vars.ACR_REGISTRY }}
+        username: ${{ vars.ACR_PULL_USERNAME }}
+        password: ${{ secrets.ACR_PULL_PASSWORD }}
+
+    - name: Build Docker image
+      run: docker build . -t oaftech.azurecr.io/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+
+    - name: Push image to registry
+      if: ${{ env.SHOULD_PUBLISH == 'true'}}
+      run: |
+        docker push ${{ vars.ACR_REGISTRY }}/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+
+  Sonarcloud:
+    name: Sonar Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          show-progress: false
+
+      - name: Set up Java Version
+        uses: actions/setup-java@v4.7.0
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4.2.4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Configure Gradle caching
+        uses: actions/cache@v4.2.4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle
+
+      - name: Gradlew test
+        run: |
+          ./gradlew test jacocoTestReport --info --build-cache
+
+      - name: SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ./gradlew sonar --info
+
+      - name: Publish Code Coverage Results
+        uses: actions/upload-artifact@v4.6.0
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/build/reports/jacoco/test/jacocoTestReport.xml
