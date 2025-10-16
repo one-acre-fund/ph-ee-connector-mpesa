@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.4
+
+        * [SER-3700] - Add paymentScheme to payments variables to indicate the MNO used
+
 ## Version 1.3.3
 
         * [SER-2918] - Add unit tests

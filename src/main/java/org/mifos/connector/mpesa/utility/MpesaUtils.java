@@ -25,6 +25,8 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.CURRENCY;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.FINERACT_AMS_IDENTIFIER;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.FINERACT_AMS_NAME;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.MEMO;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_CONSTANT;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.PAYMENT_SCHEME;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.TRANSACTION_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.WALLET_NAME;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.INITIATOR_FSP_ID;
@@ -112,6 +114,7 @@ public class MpesaUtils {
         CustomData initiatorFspId = new CustomData();
         initiatorFspId.setKey(INITIATOR_FSP_ID);
         initiatorFspId.setValue(businessShortCode);
+        CustomData paymentScheme = new CustomData(PAYMENT_SCHEME, MPESA_CONSTANT);
 
         List<CustomData> customData = new ArrayList<>();
         customData.add(reconciled);
@@ -122,6 +125,7 @@ public class MpesaUtils {
         customData.add(clientCorrelation);
         customData.add(currency);
         customData.add(initiatorFspId);
+        customData.add(paymentScheme);
         return customData;
     }
 
