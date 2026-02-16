@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.5
+
+        * [CP-3980] - Integrate Elastic APM with PH
+
 ## Version 1.3.4
 
         * [SER-3700] - Add paymentScheme to payments variables to indicate the MNO used
