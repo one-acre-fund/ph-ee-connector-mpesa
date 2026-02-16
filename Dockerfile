@@ -1,13 +1,11 @@
-# FROM openjdk:13 AS builder
-# COPY . mpesa
-# WORKDIR /mpesa
-# RUN ./gradlew --no-daemon -q -x bootJar
-# WORKDIR /mpesa/build/libs
 
-FROM openjdk:17 as mpesa
+FROM eclipse-temurin:11 AS builder
+WORKDIR /app
+COPY . .
+RUN ./gradlew bootJar
 
-# COPY --from=builder /mpesa/build/libs/*.jar ph-ee-connector-mpesa-1.0.0-SNAPSHOT.jar
-
-COPY build/libs/*.jar ./
-CMD java -jar *.jar
-
+FROM eclipse-temurin:11
+WORKDIR /app
+COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /app/config/elastic/elastic-apm-agent-1.54.0.jar /config/elastic/elastic-apm-agent.jar
+CMD ["java", "-jar", "app.jar"]
