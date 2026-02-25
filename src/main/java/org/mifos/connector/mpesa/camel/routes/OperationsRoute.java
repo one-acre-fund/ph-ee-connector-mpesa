@@ -52,7 +52,7 @@ public class OperationsRoute extends RouteBuilder {
                 .removeHeader("Authorization")
                 .setHeader(Exchange.HTTP_METHOD, constant("GET"))
                 .setHeader("Content-Type", constant("application/json"))
-                .setHeader("Platform-TenantId", constant(tenantId))
+                .setHeader(TENANT_ID, constant(tenantId))
                 .setHeader(Exchange.HTTP_RAW_QUERY,
                         simple("by=" + FILTER_BY_ERROR_CODE + "&value=${exchangeProperty." + ERROR_CODE + "}"))
                 .toD(getFilterUrl())
@@ -67,7 +67,7 @@ public class OperationsRoute extends RouteBuilder {
                 .removeHeader("Authorization")
                 .setHeader(Exchange.HTTP_METHOD, constant("GET"))
                 .setHeader("Content-Type", constant("application/json"))
-                .setHeader("Platform-TenantId", constant(tenantId))
+                .setHeader(TENANT_ID, constant(tenantId))
                 .setHeader(Exchange.HTTP_RAW_QUERY,
                         simple("by=" + FILTER_BY_ERROR_CODE + "&value=${exchangeProperty." + ERROR_CODE + "}"))
                 .toD(getFilterUrl())
@@ -81,7 +81,7 @@ public class OperationsRoute extends RouteBuilder {
                 .removeHeader("Authorization")
                 .setHeader(Exchange.HTTP_METHOD, constant("GET"))
                 .setHeader("Content-Type", constant("application/json"))
-                .setHeader("Platform-TenantId", constant(tenantId))
+                .setHeader(TENANT_ID, constant(tenantId))
                 .setHeader(Exchange.HTTP_RAW_QUERY,
                         simple("by=" + FILTER_BY_ERROR_CODE + "&value=${exchangeProperty." + ERROR_CODE + "}"))
                 .toD(getFilterUrl())

@@ -52,6 +52,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
     private final String secondaryIdentifierName = "MSISDN";
     @Autowired
     private MpesaPaybillProp mpesaPaybillProp;
+    @Value("${tenant}")
+    private String tenantId;
 
     public static HashMap<String, Boolean> reconciledStore = new HashMap<>();
     public static HashMap<String, String> workflowInstanceStore = new HashMap<>();
@@ -91,7 +93,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     e.getIn().removeHeaders("*");
                     e.getIn().setHeader(ACCOUNT_HOLDING_INSTITUTION_ID, paybillResponseDTO.getAccountHoldingInstitutionId());
                     e.getIn().setHeader(AMS_NAME, paybillResponseDTO.getAmsName());
-                    e.getIn().setHeader(TENANT_ID, paybillResponseDTO.getAccountHoldingInstitutionId());
+                    e.getIn().setHeader(TENANT_ID, tenantId);
                     e.getIn().setHeader(CLIENT_CORRELATION_ID, clientCorrelationId);
                     e.getIn().setHeader(CONTENT_TYPE, CONTENT_TYPE_VAL);
                     e.setProperty("channelUrl", channelUrl);
