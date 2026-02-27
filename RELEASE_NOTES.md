@@ -1,5 +1,12 @@
 # Release Notes
 
+## Version 1.3.6.1
+
+        * [CP-3931] - Use Kenya as the accountHoldingInstitution for multitenancy
+
+## Version 1.3.6
+
+        * [CP-3931] - Use Kenya as the Platform-TenantId for multitenancy
 ## Version 1.3.6
 
         * [CP-3931] - Use Kenya as the Platform-TenantId for multitenancy
