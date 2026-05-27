@@ -23,10 +23,15 @@ on:
 
 env:
   SHOULD_PUBLISH: ${{ (github.ref  == 'refs/heads/main' ||  github.ref == 'refs/heads/develop' || startsWith(github.ref , 'refs/heads/release') || startsWith(github.ref, 'refs/heads/hotfix')) && github.event_name != 'schedule' }}
+  REGISTRY_PROVIDER: ${{ vars.REGISTRY_PROVIDER != '' && vars.REGISTRY_PROVIDER || 'ecr' }}
+  IMAGE_REPOSITORY: oneacrefund/mpesa-connector
 
 jobs:
   Build:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       PH_EE_CONNECTOR_MPESA_IMAGE_TAG: ${{ steps.set-image-tag.outputs.IMAGE_TAG }}
     steps:
@@ -74,21 +79,62 @@ jobs:
       run: |
         ./gradlew bootJar --info --build-cache
 
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'ecr' }}
+      with:
+        role-to-assume: ${{ vars.ECR_REGISTRY_ROLE }}
+        aws-region: ${{ vars.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'ecr' }}
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Ensure ECR repository exists
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'ecr' }}
+      run: |
+        if aws ecr describe-repositories --repository-names "${{ env.IMAGE_REPOSITORY }}" >/dev/null 2>&1; then
+          echo "ECR repository '${{ env.IMAGE_REPOSITORY }}' already exists"
+        else
+          echo "Creating ECR repository '${{ env.IMAGE_REPOSITORY }}'..."
+          aws ecr create-repository \
+            --repository-name "${{ env.IMAGE_REPOSITORY }}" \
+            --image-scanning-configuration scanOnPush=true
+        fi
+
     - name: Login to Azure Container Registry
       uses: docker/login-action@v3.5.0
-      if: ${{ env.SHOULD_PUBLISH == 'true'}}
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'acr' }}
       with:
         registry: ${{ vars.ACR_REGISTRY }}
         username: ${{ vars.ACR_PULL_USERNAME }}
         password: ${{ secrets.ACR_PULL_PASSWORD }}
 
     - name: Build Docker image
-      run: docker build . -t oaftech.azurecr.io/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
-
-    - name: Push image to registry
-      if: ${{ env.SHOULD_PUBLISH == 'true'}}
       run: |
-        docker push ${{ vars.ACR_REGISTRY }}/oneacrefund/mpesa-connector:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
+        if [[ "${{ env.SHOULD_PUBLISH }}" != 'true' ]]; then
+          IMAGE="${{ env.IMAGE_REPOSITORY }}"
+        elif [[ "${{ env.REGISTRY_PROVIDER }}" == 'ecr' ]]; then
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.IMAGE_REPOSITORY }}"
+        else
+          IMAGE="${{ vars.ACR_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}"
+        fi
+        docker build . -t "${IMAGE}:${{ steps.set-image-tag.outputs.IMAGE_TAG }}"
+
+    - name: Push image to Amazon ECR
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'ecr' }}
+      run: |
+        IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.IMAGE_REPOSITORY }}"
+        TAG="${{ steps.set-image-tag.outputs.IMAGE_TAG }}"
+        docker push "${IMAGE}:${TAG}"
+        docker tag "${IMAGE}:${TAG}" "${IMAGE}:latest"
+        docker push "${IMAGE}:latest"
+
+    - name: Push image to Azure Container Registry
+      if: ${{ env.SHOULD_PUBLISH == 'true' && env.REGISTRY_PROVIDER == 'acr' }}
+      run: |
+        docker push ${{ vars.ACR_REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.set-image-tag.outputs.IMAGE_TAG }}
 
   Sonarcloud:
     name: Sonar Analysis
