@@ -38,6 +38,7 @@ public class CamelProperties {
     public static final String CONTENT_TYPE = "Content-Type";
     public static final String RECONCILED = "reconciled";
     public static final String MPESA_TXN_ID = "mpesaTxnId";
+    public static final String MPESA_RECEIPT_NUMBER = "MpesaReceiptNumber";
     public static final String CLIENT_CORRELATION_ID = "X-CorrelationID";
     public static final String ACCOUNT_HOLDING_INSTITUTION_ID = "accountHoldingInstitutionId";
 }
