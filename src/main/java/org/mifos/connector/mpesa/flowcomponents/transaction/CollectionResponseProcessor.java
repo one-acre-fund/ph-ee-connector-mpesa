@@ -117,6 +117,7 @@ public class CollectionResponseProcessor implements Processor {
                     exchange.getProperty(SERVER_TRANSACTION_ID) + "It might be possible that either transaction doesn't " +
                     "exist or this is test hit");
             response.put("zeebeVariables", objectMapper.writeValueAsString(variables));
+            exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 404);
             exchange.getIn().setBody(response.toJson());
             return;
         }

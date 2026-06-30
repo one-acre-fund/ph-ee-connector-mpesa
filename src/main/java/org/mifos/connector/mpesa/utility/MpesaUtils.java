@@ -22,9 +22,14 @@ import java.util.Objects;
 
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.AMOUNT;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CURRENCY;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.FINERACT_AMS_IDENTIFIER;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.FINERACT_AMS_NAME;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.MEMO;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_CONSTANT;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.PAYMENT_SCHEME;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.TRANSACTION_ID;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.WALLET_NAME;
+import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.INITIATOR_FSP_ID;
 
 
 @Component
@@ -43,15 +48,19 @@ public class MpesaUtils {
     @Value("${roster.host}")
     private String rosterHost;
 
+    @Value("${fineract.host}")
+    private String fineractHost;
+
     enum ams {
         paygops,
-        roster;
+        roster,
+        fineract;
     }
 
-    public GsmaTransfer createGsmaTransferDTO(PaybillResponseDTO paybillResponseDTO, String clientCorrelationId) {
+    public GsmaTransfer createGsmaTransferDTO(PaybillResponseDTO paybillResponseDTO, String clientCorrelationId, String businessShortCode) {
         GsmaTransfer gsmaTransfer = new GsmaTransfer();
 
-        List<CustomData> customData = setCustomData(paybillResponseDTO,clientCorrelationId);
+        List<CustomData> customData = setCustomData(paybillResponseDTO, clientCorrelationId, businessShortCode);
         String currentDateTime = getCurrentDateTime();
 
         Party payer = new Party();
@@ -80,7 +89,7 @@ public class MpesaUtils {
         return gsmaTransfer;
     }
 
-    private List<CustomData> setCustomData(PaybillResponseDTO paybillResponseDTO, String clientCorrelationId) {
+    private List<CustomData> setCustomData(PaybillResponseDTO paybillResponseDTO, String clientCorrelationId, String businessShortCode) {
         CustomData reconciled = new CustomData();
         reconciled.setKey("partyLookupFailed");
         reconciled.setValue(!paybillResponseDTO.isReconciled());
@@ -102,6 +111,10 @@ public class MpesaUtils {
         CustomData currency = new CustomData();
         currency.setKey("currency");
         currency.setValue(paybillResponseDTO.getCurrency());
+        CustomData initiatorFspId = new CustomData();
+        initiatorFspId.setKey(INITIATOR_FSP_ID);
+        initiatorFspId.setValue(businessShortCode);
+        CustomData paymentScheme = new CustomData(PAYMENT_SCHEME, MPESA_CONSTANT);
 
         List<CustomData> customData = new ArrayList<>();
         customData.add(reconciled);
@@ -111,6 +124,8 @@ public class MpesaUtils {
         customData.add(tenantId);
         customData.add(clientCorrelation);
         customData.add(currency);
+        customData.add(initiatorFspId);
+        customData.add(paymentScheme);
         return customData;
     }
 
@@ -137,6 +152,9 @@ public class MpesaUtils {
         } else if (amsName.equalsIgnoreCase("roster")) {
             partyIdInfoPayee.put("partyIdType", "ACCOUNTID");
             partyIdInfoPayee.put("partyIdentifier", paybillConfirmationRequestDTO.getBillRefNo());
+        } else if (FINERACT_AMS_NAME.equalsIgnoreCase(amsName)) {
+            partyIdInfoPayee.put("partyIdType", FINERACT_AMS_IDENTIFIER);
+            partyIdInfoPayee.put("partyIdentifier", paybillConfirmationRequestDTO.getBillRefNo());
         }
         payee.put("partyIdInfo", partyIdInfoPayee);
 
@@ -153,6 +171,8 @@ public class MpesaUtils {
             return paygopsHost;
         } else if (Objects.equals(amsName, ams.roster.toString())) {
             return rosterHost;
+        } else if (Objects.equals(amsName, ams.fineract.toString())) {
+            return fineractHost;
         }
         return null;
     }
@@ -160,6 +180,7 @@ public class MpesaUtils {
     public static ChannelRequestDTO convertPaybillPayloadToChannelPayload(PaybillRequestDTO paybillRequestDTO, String amsName, String currency) {
         String foundationalId = "";
         String accountID = "";
+        String fineractAccountId = "";
         // Mapping primary and secondary Identifier
         CustomData primaryIdentifier = new CustomData();
         if (amsName.equalsIgnoreCase("paygops")) {
@@ -170,6 +191,10 @@ public class MpesaUtils {
             accountID = paybillRequestDTO.getBillRefNo();
             primaryIdentifier.setKey("accountID");
             primaryIdentifier.setValue(accountID);
+        } else if (FINERACT_AMS_NAME.equalsIgnoreCase(amsName)) {
+            fineractAccountId = paybillRequestDTO.getBillRefNo();
+            primaryIdentifier.setKey(FINERACT_AMS_IDENTIFIER);
+            primaryIdentifier.setValue(fineractAccountId);
         }
         CustomData secondaryIdentifier = new CustomData();
         secondaryIdentifier.setKey("MSISDN");
@@ -245,7 +270,6 @@ public class MpesaUtils {
     }
 
     public void setProcess(String process) {
-        logger.info("Process Value being set");
         this.process = process;
     }
 
@@ -276,6 +300,34 @@ public class MpesaUtils {
     public static void main(String[] args) {
         String dt = "254708374149";
         System.out.println(maskString(dt));
+    }
+
+    /**
+     * Get the MPESA properties for the given AMS
+     * @param ams the AMS name
+     * @param transactionId the ID of the current transaction
+     * @return the MPESA properties for the given AMS
+     */
+    public MpesaProps.MPESA getMpesaProperties(String ams, String transactionId) {
+        MpesaProps.MPESA properties = null;
+        List<MpesaProps.MPESA> groups = getGroup();
+        for (MpesaProps.MPESA identifier : groups) {
+            String name = identifier.getName();
+            if (name.equalsIgnoreCase(ams)) {
+                properties = identifier;
+                break;
+
+            } else {
+                if (name.equals("default")) {
+                    properties = identifier;
+                }
+            }
+        }
+        if (properties != null && !properties.getName().equalsIgnoreCase(ams)) {
+            logger.warn("MPESA properties mismatch for transaction {}. Selected AMS is {} while the process AMS is {}. Groups are {}",
+                transactionId, properties.getName(), ams, groups);
+        }
+        return properties;
     }
 
 }

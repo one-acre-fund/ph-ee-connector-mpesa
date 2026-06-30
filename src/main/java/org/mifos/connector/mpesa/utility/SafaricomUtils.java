@@ -41,10 +41,10 @@ public class SafaricomUtils {
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
 
 
-    public BuyGoodsPaymentRequestDTO channelRequestConvertor(TransactionChannelC2BRequestDTO transactionChannelRequestDTO) {
+    public BuyGoodsPaymentRequestDTO channelRequestConvertor(TransactionChannelC2BRequestDTO transactionChannelRequestDTO, String transactionId, String ams) {
         logger.info("TransactionChannelCollectionRequestDTO chile converting " + transactionChannelRequestDTO);
         BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = new BuyGoodsPaymentRequestDTO();
-        mpesaProps = mpesaUtils.setMpesaProperties();
+        mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
 
         long amount = Long.parseLong(transactionChannelRequestDTO.getAmount().getAmount().trim());
         long timestamp = getTimestamp(); //123; //Long.parseLong(sdf.format(new Date()));
