@@ -242,22 +242,38 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     String body = exchange.getIn().getBody(String.class);
                     JSONObject jsonObject = new JSONObject(body);
                     exchange.setProperty(LAST_RESPONSE_BODY, body);
-                    String server_id = jsonObject.getString("CheckoutRequestID");
-                    String resultCode = jsonObject.getString("ResultCode");
-                    String resultDescription = jsonObject.getString("ResultDesc");
-                    String receiptNumber = jsonObject.getString(MPESA_RECEIPT_NUMBER);
                     Object correlationId = exchange.getProperty(CORRELATION_ID);
+                    exchange.setProperty(TRANSACTION_ID, correlationId);
 
-                    if(resultCode.equals("0")) {
+                    String serverId = jsonObject.optString("CheckoutRequestID", null);
+                    if (serverId == null || serverId.isEmpty()) {
+                        serverId = exchange.getProperty(SERVER_TRANSACTION_ID, String.class);
+                    }
+                    if (serverId != null && !serverId.isEmpty()) {
+                        exchange.setProperty(SERVER_TRANSACTION_ID, serverId);
+                    }
+
+                    if (!jsonObject.has("ResultCode")) {
+                        logger.info(
+                                "Transaction status response for {} has no ResultCode yet; treating as pending. Body: {}",
+                                correlationId, body);
+                        exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                    }
+
+                    String resultCode = String.valueOf(jsonObject.get("ResultCode"));
+                    String resultDescription = jsonObject.optString("ResultDesc", "");
+
+                    if ("0".equals(resultCode)) {
                         exchange.setProperty(TRANSACTION_FAILED, false);
-                        exchange.setProperty(SERVER_TRANSACTION_RECEIPT_NUMBER, receiptNumber);
+                        if (jsonObject.has(MPESA_RECEIPT_NUMBER)) {
+                            exchange.setProperty(SERVER_TRANSACTION_RECEIPT_NUMBER,
+                                    jsonObject.getString(MPESA_RECEIPT_NUMBER));
+                        }
                     } else {
                         exchange.setProperty(ERROR_CODE, resultCode);
-                        exchange.setProperty(ERROR_INFORMATION, exchange.getIn().getBody(String.class));
+                        exchange.setProperty(ERROR_INFORMATION, body);
                         exchange.setProperty(ERROR_DESCRIPTION, resultDescription);
                     }
-                    exchange.setProperty(SERVER_TRANSACTION_ID, server_id);
-                    exchange.setProperty(TRANSACTION_ID, correlationId);
                 })
                 .choice()
                 .when(exchange -> exchange.getProperty(ERROR_CODE) != null)
