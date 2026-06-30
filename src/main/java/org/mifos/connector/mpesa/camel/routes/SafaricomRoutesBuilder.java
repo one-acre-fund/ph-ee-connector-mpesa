@@ -248,7 +248,6 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                                 "Transaction status response for {} has no ResultCode yet; treating as pending. Body: {}",
                                 correlationId, body);
                         exchange.setProperty(IS_TRANSACTION_PENDING, true);
-                        return;
                     }
 
                     String resultCode = String.valueOf(jsonObject.get("ResultCode"));

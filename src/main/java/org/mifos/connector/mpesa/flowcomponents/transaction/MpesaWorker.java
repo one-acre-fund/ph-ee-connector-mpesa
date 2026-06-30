@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.BUY_GOODS_REQUEST_BODY;
@@ -141,7 +142,10 @@ public class MpesaWorker {
                     String mpesaTxnId = variables.get("mpesaTxnId").toString();
                     logger.debug("Txn Id Removed :{}", mpesaTxnId);
                     workflowInstanceStore.remove(mpesaTxnId);
+                    Map<String, Object> completionVariables = new HashMap<>();
+                    completionVariables.put(TRANSFER_CREATE_FAILED, true);
                     client.newCompleteCommand(job.getKey())
+                            .variables(completionVariables)
                             .send()
                             .join();
                 }))
