@@ -9,6 +9,7 @@ import org.apache.camel.support.DefaultExchange;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
+import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +48,9 @@ public class TransactionStateWorker {
     @Value("${skip.enabled}")
     private Boolean skipMpesa;
 
+    @Value("${zeebe.client.request-timeout}")
+    private Duration requestTimeout;
+
     @PostConstruct
     public void setupWorkers() {
 
@@ -68,14 +72,20 @@ public class TransactionStateWorker {
                         variables.put(SERVER_TRANSACTION_STATUS_RETRY_COUNT, retryCount);
                         variables.put(SERVER_TRANSACTION_ID, serverTransactionId);
                         exchange.setProperty(TIMER, variables.get(TIMER));
-                        zeebeClient.newPublishMessageCommand()
-                                .messageName(TRANSFER_MESSAGE)
-                                .correlationKey((String) variables.get("transactionId"))
-                                .timeToLive(Duration.ofMillis(300))
-                                .variables(variables)
-                                .send()
-                                .join();
-                        logger.info("Published Variables");
+                        try {
+                            ZeebeCommandHelper.join(zeebeClient.newPublishMessageCommand()
+                                    .messageName(TRANSFER_MESSAGE)
+                                    .correlationKey((String) variables.get("transactionId"))
+                                    .timeToLive(Duration.ofMillis(300))
+                                    .variables(variables)
+                                    .send(), requestTimeout);
+                            logger.info("Published Variables");
+                        } catch (Exception e) {
+                            logger.error("Publish message failed for job {}", job.getKey(), e);
+                            ZeebeCommandHelper.failJob(client, job,
+                                    "Publish message failed: " + e.getMessage(), requestTimeout, logger);
+                            return;
+                        }
                     }
                     else {
                         Integer retryCount = 1 + (Integer) variables.getOrDefault(SERVER_TRANSACTION_STATUS_RETRY_COUNT, 0);
@@ -96,15 +106,9 @@ public class TransactionStateWorker {
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
 
                         producerTemplate.send("direct:get-transaction-status-base", exchange);
+                    }
 
-                    /*variables.put(STATUS_AVAILABLE, exchange.getProperty(STATUS_AVAILABLE, Boolean.class));
-                    if (exchange.getProperty(STATUS_AVAILABLE, Boolean.class)) {
-                        variables.put(TRANSACTION_STATUS, exchange.getProperty(TRANSACTION_STATUS, String.class));
-                    }*/}
-
-                        client.newCompleteCommand(job.getKey())
-                                .send()
-                                .join();
+                    ZeebeCommandHelper.completeJob(client, job, null, requestTimeout, logger);
                     })
                 .name("get-transaction-status")
                 .maxJobsActive(workerMaxJobs)

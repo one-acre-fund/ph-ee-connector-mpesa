@@ -11,6 +11,7 @@ import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.utility.ZeebeUtils;
+import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -68,6 +70,9 @@ public class MpesaWorker {
 
     @Value("${skip.enabled}")
     private Boolean skipMpesa;
+
+    @Value("${zeebe.client.request-timeout}")
+    private Duration requestTimeout;
 
     @PostConstruct
     public void setupWorkers() {
@@ -130,10 +135,7 @@ public class MpesaWorker {
                         }
                     }
 
-                    client.newCompleteCommand(job.getKey())
-                            .variables(variables)
-                            .send()
-                            .join();
+                    ZeebeCommandHelper.completeJob(client, job, variables, requestTimeout, logger);
                 })
                 .name("init-transfer")
                 .maxJobsActive(workerMaxJobs)
@@ -149,10 +151,7 @@ public class MpesaWorker {
                     workflowInstanceStore.remove(mpesaTxnId);
                     Map<String, Object> completionVariables = new HashMap<>();
                     completionVariables.put(TRANSFER_CREATE_FAILED, true);
-                    client.newCompleteCommand(job.getKey())
-                            .variables(completionVariables)
-                            .send()
-                            .join();
+                    ZeebeCommandHelper.completeJob(client, job, completionVariables, requestTimeout, logger);
                 }))
                 .name("Cleanup")
                 .maxJobsActive(workerMaxJobs)

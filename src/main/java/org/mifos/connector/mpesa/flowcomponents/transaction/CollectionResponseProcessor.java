@@ -7,6 +7,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.http.base.HttpOperationFailedException;
 import org.apache.camel.util.json.JsonObject;
 import org.mifos.connector.mpesa.utility.ZeebeUtils;
+import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,9 @@ public class CollectionResponseProcessor implements Processor {
 
     @Value("${zeebe.client.ttl}")
     private int timeToLive;
+
+    @Value("${zeebe.client.request-timeout}")
+    private Duration requestTimeout;
 
     public CollectionResponseProcessor(ZeebeClient zeebeClient) {
         this.zeebeClient = zeebeClient;
@@ -74,10 +78,9 @@ public class CollectionResponseProcessor implements Processor {
             logger.info("Updating timer value to " + newTimer);
             variables.put(TIMER, newTimer);
             Long elementInstanceKey = (Long) exchange.getProperty(ZEEBE_ELEMENT_INSTANCE_KEY);
-            zeebeClient.newSetVariablesCommand(elementInstanceKey)
+            ZeebeCommandHelper.join(zeebeClient.newSetVariablesCommand(elementInstanceKey)
                     .variables(variables)
-                    .send()
-                    .join();
+                    .send(), requestTimeout);
             return;
         }
 
@@ -122,12 +125,11 @@ public class CollectionResponseProcessor implements Processor {
             return;
         }
         logger.info("Publishing transaction message variables: " + variables);
-        zeebeClient.newPublishMessageCommand()
+        ZeebeCommandHelper.join(zeebeClient.newPublishMessageCommand()
                 .messageName(TRANSFER_MESSAGE)
                 .correlationKey(clientCorrelationId)
                 .timeToLive(Duration.ofMillis(timeToLive))
                 .variables(variables)
-                .send()
-                .join();
+                .send(), requestTimeout);
     }
 }
