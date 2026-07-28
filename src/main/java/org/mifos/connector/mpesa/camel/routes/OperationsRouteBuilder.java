@@ -3,7 +3,9 @@ package org.mifos.connector.mpesa.camel.routes;
 import io.camunda.zeebe.client.ZeebeClient;
 import org.apache.camel.LoggingLevel;
 import org.json.JSONObject;
+import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.mifos.connector.common.camel.ErrorHandlerRouteBuilder;
 
@@ -20,6 +22,9 @@ public class OperationsRouteBuilder extends ErrorHandlerRouteBuilder {
     @Autowired
     private ZeebeClient zeebeClient;
 
+    @Value("${zeebe.client.request-timeout}")
+    private Duration requestTimeout;
+
     @Override
     public void configure() {
 
@@ -33,13 +38,12 @@ public class OperationsRouteBuilder extends ErrorHandlerRouteBuilder {
                         variables.put(k, request.get(k));
                     });
 
-                    zeebeClient.newPublishMessageCommand()
+                    ZeebeCommandHelper.join(zeebeClient.newPublishMessageCommand()
                             .messageName(OPERATOR_MANUAL_RECOVERY)
                             .correlationKey(e.getIn().getHeader(TRANSACTION_ID, String.class))
                             .timeToLive(Duration.ofMillis(30000))
                             .variables(variables)
-                            .send()
-                            .join();
+                            .send(), requestTimeout);
                 })
                 .setBody(constant((Object) null));
 
@@ -55,19 +59,16 @@ public class OperationsRouteBuilder extends ErrorHandlerRouteBuilder {
                         newVariables.put(k, requestedVariables.get(k));
                     });
 
-                    zeebeClient.newSetVariablesCommand(incident.getLong("elementInstanceKey"))
+                    ZeebeCommandHelper.join(zeebeClient.newSetVariablesCommand(incident.getLong("elementInstanceKey"))
                             .variables(newVariables)
-                            .send()
-                            .join();
+                            .send(), requestTimeout);
 
-                    zeebeClient.newUpdateRetriesCommand(incident.getLong("jobKey"))
+                    ZeebeCommandHelper.join(zeebeClient.newUpdateRetriesCommand(incident.getLong("jobKey"))
                             .retries(incident.getInt("newRetries"))
-                            .send()
-                            .join();
+                            .send(), requestTimeout);
 
-                    zeebeClient.newResolveIncidentCommand(incident.getLong("key"))
-                            .send()
-                            .join();
+                    ZeebeCommandHelper.join(zeebeClient.newResolveIncidentCommand(incident.getLong("key"))
+                            .send(), requestTimeout);
                 })
                 .setBody(constant((Object) null));
 
@@ -83,23 +84,22 @@ public class OperationsRouteBuilder extends ErrorHandlerRouteBuilder {
                         newVariables.put(k, requestedVariables.get(k));
                     });
 
-                    zeebeClient.newSetVariablesCommand(incident.getLong("elementInstanceKey"))
+                    ZeebeCommandHelper.join(zeebeClient.newSetVariablesCommand(incident.getLong("elementInstanceKey"))
                             .variables(newVariables)
-                            .send()
-                            .join();
+                            .send(), requestTimeout);
 
-                    zeebeClient.newResolveIncidentCommand(incident.getLong("key"))
-                            .send()
-                            .join();
+                    ZeebeCommandHelper.join(zeebeClient.newResolveIncidentCommand(incident.getLong("key"))
+                            .send(), requestTimeout);
                 })
                 .setBody(constant((Object) null));
 
         from("rest:POST:/channel/workflow/{workflowInstanceKey}/cancel")
                 .id("workflow-cancel")
                 .log(LoggingLevel.INFO, "## operator workflow cancel ${header.workflowInstanceKey}")
-                .process(e -> zeebeClient.newCancelInstanceCommand(Long.parseLong(e.getIn().getHeader("workflowInstanceKey", String.class)))
-                        .send()
-                        .join())
+                .process(e -> ZeebeCommandHelper.join(
+                        zeebeClient.newCancelInstanceCommand(
+                                        Long.parseLong(e.getIn().getHeader("workflowInstanceKey", String.class)))
+                                .send(), requestTimeout))
                 .setBody(constant((Object) null));
 
     }

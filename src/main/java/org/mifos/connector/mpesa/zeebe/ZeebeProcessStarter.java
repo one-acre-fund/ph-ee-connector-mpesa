@@ -5,8 +5,10 @@ import org.apache.camel.Exchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +21,9 @@ public class ZeebeProcessStarter {
 
     @Autowired
     private ZeebeClient zeebeClient;
+
+    @Value("${zeebe.client.request-timeout}")
+    private Duration requestTimeout;
 
     public static void zeebeVariablesToCamelHeaders(Map<String, Object> variables, Exchange exchange, String... names) {
         for (String name : names) {
@@ -45,12 +50,11 @@ public class ZeebeProcessStarter {
         variables.putAll(extraVariables);
         // TODO: Add extra variables if required. Such as origin date.
 
-        zeebeClient.newCreateInstanceCommand()
+        ZeebeCommandHelper.join(zeebeClient.newCreateInstanceCommand()
                 .bpmnProcessId(workflowId)
                 .latestVersion() // .version(1)
                 .variables(variables)
-                .send()
-                .join();
+                .send(), requestTimeout);
 
         logger.info("zeebee workflow instance from process {} started", workflowId);
     }

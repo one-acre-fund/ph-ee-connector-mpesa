@@ -14,6 +14,10 @@ zeebe:
     number-of-workers: 5
     evenly-allocated-max-jobs: "#{${zeebe.client.max-execution-threads} / ${zeebe.client.number-of-workers}}"
     ttl: 30000
+    # Detect half-open gRPC connections (LB/NAT idle drops) so ActivateJobs can reconnect
+    keep-alive: 30s
+    # Bound all command futures (.join) so worker slots cannot hang forever
+    request-timeout: 30s
   broker:
     contactpoint: "localhost:26500"
   init-transfer:
