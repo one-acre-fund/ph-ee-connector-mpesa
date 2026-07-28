@@ -2,7 +2,7 @@
 
 ## Version 1.3.7
 
-        * [FD-1882] - Add a timeout and keep alive  on zeebe to resolve job workers becoming stuck
+        * [FD-1882] - Add a timeout and keep-alive on Zeebe to resolve job workers becoming stuck
 
 ## Version 1.3.6.1
 
