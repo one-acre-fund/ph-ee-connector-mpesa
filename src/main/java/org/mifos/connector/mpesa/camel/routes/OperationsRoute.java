@@ -6,6 +6,7 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jackson.ListJacksonDataFormat;
 import org.mifos.connector.mpesa.dto.ErrorCode;
 import org.mifos.connector.mpesa.flowcomponents.transaction.ErrorProcessor;
+import org.mifos.connector.mpesa.utility.ConnectionUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,9 @@ public class OperationsRoute extends RouteBuilder {
 
     @Value("${operations.filter-path}")
     private String operationsFilterPath;
+
+    @Value("${operations.timeout:60000}")
+    private Integer operationsTimeout;
 
     @Value("${tenant}")
     private String tenantId;
@@ -102,7 +106,7 @@ public class OperationsRoute extends RouteBuilder {
 
     private String getFilterUrl() {
         String url = operationsHost + operationsBaseUrl + operationsFilterPath;
-        String internalParams = "?bridgeEndpoint=true&throwExceptionOnFailure=false";
-        return url + internalParams;
+        return url + "?bridgeEndpoint=true&throwExceptionOnFailure=false&"
+                + ConnectionUtils.getConnectionTimeoutDsl(operationsTimeout);
     }
 }

@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.8
+
+        * [FD-1888] - Harden Camel HttpClient pool (TTL/idle eviction) against Azure NAT/LB idle drops causing Connection reset to Safaricom
+
 ## Version 1.3.7
 
         * [FD-1882] - Add a timeout and keep-alive on Zeebe to resolve job workers becoming stuck

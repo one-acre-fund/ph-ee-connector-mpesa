@@ -38,11 +38,18 @@ operations:
   host: http://ph-ee-operations-app
   base-url: /api/v1/errorcode
   filter-path: /filter
+  timeout: 60000
 
 mpesa:
   max-retry-count: 2
   api:
     timeout: 60000
+    # Keep pooled HTTP connections below Azure NAT/LB TCP idle timeout (default 4 minutes)
+    connection-time-to-live: 120000
+    connection-idle-evict: 60000
+    validate-after-inactivity: 1000
+    max-total-connections: 200
+    connections-per-route: 50
     lipana: /mpesa/stkpush/v1/processrequest
     transaction-status: /mpesa/stkpushquery/v2/query
   local:
