@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.time.Instant;
 
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.*;
@@ -88,6 +89,35 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
     public void configure() {
         mpesaProps = mpesaUtils.setMpesaProperties();
         logger.info("AMS Name set by configure" + mpesaProps.getName());
+
+        // Transport failures (e.g. Connection reset from dead keep-alive after NAT idle drop)
+        // must not blow up Zeebe workers; status stays pending, buy-goods is marked failed.
+        onException(IOException.class)
+                .handled(true)
+                .log(LoggingLevel.ERROR,
+                        "Safaricom HTTP I/O error for transaction ${exchangeProperty." + CORRELATION_ID
+                                + "}: ${exception.message}")
+                .process(exchange -> {
+                    Exception cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    String message = cause != null ? cause.getMessage() : "I/O error calling Safaricom";
+                    logger.error("Safaricom HTTP I/O failure", cause);
+
+                    exchange.setProperty(ERROR_CODE, "CONNECTION_ERROR");
+                    exchange.setProperty(ERROR_DESCRIPTION, message);
+                    exchange.setProperty(ERROR_INFORMATION, cause != null ? cause.toString() : message);
+                    exchange.setProperty(LAST_RESPONSE_BODY, exchange.getProperty(ERROR_INFORMATION));
+                    exchange.setProperty(TRANSACTION_ID, exchange.getProperty(CORRELATION_ID));
+
+                    if (exchange.getProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT) != null) {
+                        exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                    } else {
+                        exchange.setProperty(TRANSACTION_FAILED, true);
+                    }
+                })
+                .filter(exchange -> exchange.getProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT) != null)
+                    .process(collectionResponseProcessor)
+                .end();
+
         /*
          * Use this endpoint for getting the mpesa transaction status
          * The request parameter is same as the safaricom standards
