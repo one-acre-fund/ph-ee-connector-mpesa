@@ -31,10 +31,16 @@ metadata:
     - url: https://elastic.oneacrefund.org/app/r?l=DISCOVER_APP_LOCATOR&v=9.3.0&lz=N4IgjgrgpgTgniAXKSsGJCANCANgQwDsBzCfYqJEAa2nhAF8cBnAexgBckBtbkAAQ4BLALZRmHfCIAO2EABNxAYxABdVTiWtcEEYWY8NIIYQ6wAbvlxV8EDqzkAzIbjMwDibqDGSkoeULM%2BABGuFDySI5WzFA4hFDE%2BGaR0bEgVkL4HoQQuLg4JooAHlSOAIzBAExKFQAMALQALI21AGz1ZWXh9fhQwQAc9QCsjgDstZWj%2BKONAJy1lDjUUOggMTDmQkpQAHSEUosgzlC4ERjrm9t7B3LS%2BDBSHih0q3dwYqYAFhDBO28fHG%2Bv2kn3qUCg9S0hHiSnsMHqMnE%2BB2%2FVqjBwHDg0koGBBDxi6PALz8IBESSUnwA%2BnisjjQBctrt9mIqP8oF8fn98O92YDOSCwRCoTC4QjsUEUWiGEwQAASCRJOlrOE49LSaQAZUkyWlRk%2BQkUAGFPvcuIgorgYjh5El8AA1IRQADuAEkzkcKtU6k0Wu1Ot1egNhmMJlMZvNDsIxAAlIgUEmOGCsERUQisJ0dT5yeyp9OEmBQRPiT4u0wWKwkyw6HGtWp12o4O4QAmIDgwaAyyTBEkGqjyYK1WZKIb9Rz1ADM%2FVaSia%2FUm9VmA4a8lm4UcrVmo1mZUqERwBGCJyoAFVTEIOGEItKgA%3D
       title: Kong ingress logs
       icon: globe
+    - url: https://elastic.oneacrefund.org/app/r?l=DISCOVER_APP_LOCATOR&v=9.3.0&lz=N4IgjgrgpgTgniAXKSsGJCANCANgQwDsBzCfYqJEAa2nhAF8cBnAexgBckBtbkAAQ4BLALZRmHfCIAO2EABNxAYxABdVTiWtcEEYWY8QY5s3KUNIIYQ6wAbvlxV8EDqzkAzIbhswDibqBikkigVooAHlTyAGzuAIzRUAAc%2BAC07gDM8akALAAMAKxp%2BHFQAJypSQBGeYrR%2BFD4SRkFcg5C%2BH6EELi4OIRQxPg2SO4OzFA48kKmVbhQ8qPjkyAccNKUGNIAFjCdlDjUUOg0EFWwAzbMAHRa1vhWsNeEUgcg0vh7In4odCc7qSgUFSdwGSlcMFSMnE%2BEYTHAfxCRmGSm2AH0dnsJkjaOcYJdxLdWPdHjBnq8qACgSDiWCIVCNqY4TgACQSYabUASdibED4aTSADKkhGDAYFm2QkUAGFtp8uIgxrgJlNhvgAGpCKAAdwAkosMDF4okUuksnFcoViqUKtValB6o1mq0cMIxAAlIgUJHuGCsERUQisbWpOLbOSuQPBxg4GBQX3iba66x2BxI%2Bw6TbRPI5vI4D4QbGIDgwaDwyRVJFSqhVJJJUryABMjdDJQqOUaeVSVXcZTSZSUSRyOTKjfOhWicgI50cGAAqtYhBx5osxUA%3D
+      title: Application logs
+      icon: globe
+    - url: https://github.com/one-acre-fund/ph-ee-connector-mpesa/blob/main/.github/workflows/build.yaml
+      title: Build Pipeline
+      icon: build
 spec:
   type: worker
   lifecycle: production
-  owner: group:one-acre-fund/team-credit-and-payments
+  owner: group:one-acre-fund/team-credits-and-payments
   system: connectors
   consumesApis:
     - zeebe-gateway-grpc-api
