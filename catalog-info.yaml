@@ -25,6 +25,12 @@ metadata:
     - url: https://ph-web.oneacrefund.org
       title: Production Environment
       icon: globe
+    - url: https://elastic.oneacrefund.org/app/apm/services/ph-ee-connector-mno-mpesa/overview?comparisonEnabled=true&environment=ENVIRONMENT_ALL&kuery=&latencyAggregationType=avg&offset=1d&rangeFrom=now-1h&rangeTo=now&serviceGroup=&transactionType=request
+      title: Elastic APM Dashboard
+      icon: globe
+    - url: https://elastic.oneacrefund.org/app/r?l=DISCOVER_APP_LOCATOR&v=9.3.0&lz=N4IgjgrgpgTgniAXKSsGJCANCANgQwDsBzCfYqJEAa2nhAF8cBnAexgBckBtbkAAQ4BLALZRmHfCIAO2EABNxAYxABdVTiWtcEEYWY8NIIYQ6wAbvlxV8EDqzkAzIbjMwDibqDGSkoeULM%2BABGuFDySI5WzFA4hFDE%2BGaR0bEgVkL4HoQQuLg4JooAHlSOAIzBAExKFQAMALQALI21AGz1ZWXh9fhQwQAc9QCsjgDstZWj%2BKONAJy1lDjUUOggMTDmQkpQAHSEUosgzlC4ERjrm9t7B3LS%2BDBSHih0q3dwYqYAFhDBO28fHG%2Bv2kn3qUCg9S0hHiSnsMHqMnE%2BB2%2FVqjBwHDg0koGBBDxi6PALz8IBESSUnwA%2BnisjjQBctrt9mIqP8oF8fn98O92YDOSCwRCoTC4QjsUEUWiGEwQAASCRJOlrOE49LSaQAZUkyWlRk%2BQkUAGFPvcuIgorgYjh5El8AA1IRQADuAEkzkcKtU6k0Wu1Ot1egNhmMJlMZvNDsIxAAlIgUEmOGCsERUQisJ0dT5yeyp9OEmBQRPiT4u0wWKwkyw6HGtWp12o4O4QAmIDgwaAyyTBEkGqjyYK1WZKIb9Rz1ADM%2FVaSia%2FUm9VmA4a8lm4UcrVmo1mZUqERwBGCJyoAFVTEIOGEItKgA%3D
+      title: Kong ingress logs
+      icon: globe
 spec:
   type: worker
   lifecycle: production
