@@ -9,6 +9,7 @@ metadata:
     backstage.io/kubernetes-id: ph-ee-connector-mpesa
     sonarqube.org/project-key: one-acre-fund_ph-ee-connector-mpesa
     backstage.io/code-coverage: sonarqube
+    backstage.io/kubernetes-label-selector: 'app=ph-ee-connector-mpesa'
   tags:
     - java
     - zeebe-connector
@@ -38,9 +39,9 @@ metadata:
       title: Build Pipeline
       icon: build
 spec:
-  type: worker
+  type: service
   lifecycle: production
-  owner: group:one-acre-fund/team-credits-and-payments
+  owner: group:default/team-credits-and-payments
   system: connectors
   consumesApis:
     - zeebe-gateway-grpc-api
