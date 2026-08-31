@@ -1,40 +1,30 @@
 package org.mifos.connector.mpesa.flowcomponents;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Stream;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class CorrelationIDStore {
-    HashMap<String, String> correlation = new HashMap<>();
 
-    public HashMap<String, String> getCorrelation() {
-        return correlation;
-    }
+    static final String KEY_PREFIX = "mpesa:correlation:";
 
-    public void setCorrelation(HashMap<String, String> correlation) {
-        this.correlation = correlation;
+    private final StringRedisTemplate redisTemplate;
+
+    @Value("${redis.ttl.correlation-hours}")
+    private long correlationTtlHours;
+
+    public CorrelationIDStore(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
     public void addMapping(String serverCorrelation, String clientCorrelation) {
-        correlation.put(serverCorrelation, clientCorrelation);
+        redisTemplate.opsForValue().set(KEY_PREFIX + serverCorrelation, clientCorrelation, correlationTtlHours, TimeUnit.HOURS);
     }
 
-    public String getClientCorrelation (String serverCorrelation) {
-        return correlation.get(serverCorrelation);
-    }
-
-    public Stream<String> getServerCorrelations(String clientCorrelation) {
-        return correlation
-                .entrySet()
-                .stream()
-                .filter(entry -> clientCorrelation.equals(entry.getValue()))
-                .map(Map.Entry::getKey);
-    }
-
-    public boolean isClientCorrelationPresent (String clientCorrelation) {
-        return correlation.containsValue(clientCorrelation);
+    public String getClientCorrelation(String serverCorrelation) {
+        return redisTemplate.opsForValue().get(KEY_PREFIX + serverCorrelation);
     }
 }

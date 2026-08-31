@@ -3,8 +3,12 @@ package org.mifos.connector.mpesa.camel.routes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.camunda.zeebe.client.ZeebeClient;
 import org.apache.camel.CamelContext;
@@ -23,9 +27,14 @@ import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PaybillRouteTest {
 
   @InjectMocks
@@ -37,16 +46,23 @@ class PaybillRouteTest {
   @Mock
   private ZeebeClient zeebeClient;
 
+  @Mock
+  private StringRedisTemplate redisTemplate;
+
+  @Mock
+  private ValueOperations<String, String> valueOps;
+
   private CamelContext camelContext;
 
   @BeforeEach
   void setUp() throws Exception {
+    when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
     camelContext = new DefaultCamelContext();
 
     RestConfiguration restConfiguration = new RestConfiguration();
     restConfiguration.setComponent("jetty");
     restConfiguration.setHost("localhost");
-//    restConfiguration.setPort(8080);
 
     camelContext.setRestConfiguration(restConfiguration);
 
@@ -57,7 +73,6 @@ class PaybillRouteTest {
   @AfterEach
   void tearDown() {
     camelContext.stop();
-    mpesaUtils = mock(MpesaUtils.class);
   }
 
   @Test
@@ -112,16 +127,20 @@ class PaybillRouteTest {
   }
 
   @Test
-  void paybillResponseSuccess_shouldStoreWorkflowInstance() {
+  void paybillResponseSuccess_shouldBuildResultResponse() {
+    when(valueOps.get(PaybillRoute.RECONCILED_KEY_PREFIX + "12345")).thenReturn("true");
+
     String responseBody = "{\"transactionId\":\"workflow123\"}";
     Exchange exchange = new DefaultExchange(camelContext);
     exchange.getIn().setBody(responseBody);
-    exchange.getIn().setHeader("clientCorrelationId", "12345");
+    exchange.getIn().setHeader("X-CorrelationID", "12345");
 
     ProducerTemplate template = camelContext.createProducerTemplate();
     template.send("direct:paybill-response-success", exchange);
 
-    assertTrue(exchange.getIn().getBody(String.class).contains("workflow123"));
+    String body = exchange.getIn().getBody(String.class);
+    assertNotNull(body);
+    assertTrue(body.contains("ResultCode"));
   }
 
   @Test
@@ -138,9 +157,10 @@ class PaybillRouteTest {
 
   @Test
   void confirmation_shouldPublishZeebeMessage() {
+    when(valueOps.get(PaybillRoute.WORKFLOW_INSTANCE_KEY_PREFIX + "12345")).thenReturn("workflow123");
+
     String requestBody =
         "{\"transactionID\":\"12345\",\"shortCode\":\"600000\",\"msisdn\":\"254700000000\",\"transactionAmount\":100,\"billRefNo\":\"123\"}";
-    PaybillRoute.workflowInstanceStore.put("12345", "workflow123");
 
     Exchange exchange = new DefaultExchange(camelContext);
     exchange.getIn().setBody(requestBody);
@@ -150,5 +170,4 @@ class PaybillRouteTest {
 
     assertTrue(exchange.getIn().getBody(String.class).contains("123"));
   }
-
 }

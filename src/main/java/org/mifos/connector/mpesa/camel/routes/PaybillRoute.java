@@ -18,11 +18,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.camel.Exchange.HTTP_RESPONSE_CODE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ACCOUNT_HOLDING_INSTITUTION_ID;
@@ -41,8 +43,13 @@ import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSFER_CREATE_FAI
 
 @Component
 public class PaybillRoute extends ErrorHandlerRouteBuilder {
+
+    public static final String RECONCILED_KEY_PREFIX = "mpesa:paybill:reconciled:";
+    public static final String WORKFLOW_INSTANCE_KEY_PREFIX = "mpesa:paybill:workflow:";
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Autowired
     private ZeebeClient zeebeClient;
     @Value("${channel.host}")
@@ -54,9 +61,12 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
     private MpesaPaybillProp mpesaPaybillProp;
     @Value("${tenant}")
     private String tenantId;
-
-    public static HashMap<String, Boolean> reconciledStore = new HashMap<>();
-    public static HashMap<String, String> workflowInstanceStore = new HashMap<>();
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+    @Value("${redis.ttl.paybill-reconciled-hours}")
+    private long reconciledTtlHours;
+    @Value("${redis.ttl.paybill-workflow-hours}")
+    private long workflowTtlHours;
 
     @Override
     public void configure() {
@@ -87,7 +97,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     Boolean reconciled = paybillResponseDTO.isReconciled();
                     String mpesaTxnId = paybillResponseDTO.getTransactionId();
                     String clientCorrelationId = mpesaTxnId;
-                    reconciledStore.put(clientCorrelationId, reconciled);
+                    redisTemplate.opsForValue().set(RECONCILED_KEY_PREFIX + clientCorrelationId,
+                            reconciled.toString(), reconciledTtlHours, TimeUnit.HOURS);
                     String businessShortCode = e.getProperty(INITIATOR_FSP_ID, String.class);
                     GsmaTransfer gsmaTransfer = mpesaUtils.createGsmaTransferDTO(paybillResponseDTO, clientCorrelationId, businessShortCode);
                     e.getIn().removeHeaders("*");
@@ -145,17 +156,19 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                 .id("paybill-response-success")
                 .log(LoggingLevel.INFO, "Sending paybill response")
                 .process(e -> {
-                    // Setting mpesa specifc response
                     String channelResponseBodyString = e.getIn().getBody(String.class);
                     logger.debug("channelResponseBodyString:{}", channelResponseBodyString);
                     JSONObject channelResponse = new JSONObject(channelResponseBodyString);
                     String workflowInstanceKey = channelResponse.getString("transactionId");
 
                     String clientCorrelationId = e.getIn().getHeader(CLIENT_CORRELATION_ID).toString();
-                    Boolean reconciled = reconciledStore.get(clientCorrelationId);
-                    // Storing the key value
-                    workflowInstanceStore.put(clientCorrelationId, workflowInstanceKey);
-                    reconciledStore.remove(clientCorrelationId);
+                    String reconciledStr = redisTemplate.opsForValue().get(RECONCILED_KEY_PREFIX + clientCorrelationId);
+                    Boolean reconciled = reconciledStr != null && Boolean.parseBoolean(reconciledStr);
+
+                    redisTemplate.opsForValue().set(WORKFLOW_INSTANCE_KEY_PREFIX + clientCorrelationId,
+                            workflowInstanceKey, workflowTtlHours, TimeUnit.HOURS);
+                    redisTemplate.delete(RECONCILED_KEY_PREFIX + clientCorrelationId);
+
                     JSONObject responseObject = new JSONObject();
                     responseObject.put("ResultCode", reconciled ? 0 : 1);
                     responseObject.put("ResultDesc", reconciled ? "Accepted" : "Rejected");
@@ -183,7 +196,6 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                 .process(e -> {
                     PaybillRequestDTO paybillConfirmationRequestDTO = e.getIn().getBody(PaybillRequestDTO.class);
                     e.setProperty("mpesaTransactionId", paybillConfirmationRequestDTO.getTransactionID());
-                    //Getting the ams name
                     String businessShortCode = paybillConfirmationRequestDTO.getShortCode();
                     String amsName = mpesaPaybillProp.getAMSFromShortCode(businessShortCode);
                     String currency = mpesaPaybillProp.getCurrencyFromShortCode(businessShortCode);
@@ -195,10 +207,10 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
 
                     ChannelSettlementRequestDTO obj = mpesaUtils.convertPaybillToChannelPayload(paybillConfirmationRequestDTO, amsName, currency);
                     e.setProperty("CONFIRMATION_REQUEST", obj.toString());
-                    //Getting mpesa and workflow transaction id and removing key
+
                     String mpesaTransactionId = paybillConfirmationRequestDTO.getTransactionID();
-                    String transactionId = workflowInstanceStore.get(mpesaTransactionId);
-                    workflowInstanceStore.remove(mpesaTransactionId);
+                    String transactionId = redisTemplate.opsForValue().get(WORKFLOW_INSTANCE_KEY_PREFIX + mpesaTransactionId);
+                    redisTemplate.delete(WORKFLOW_INSTANCE_KEY_PREFIX + mpesaTransactionId);
 
                     Map<String, Object> variables = new HashMap<>();
                     variables.put("confirmationReceived", true);

@@ -1,3 +1,16 @@
+spring:
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    timeout: 2000ms
+
+redis:
+  ttl:
+    correlation-hours: ${REDIS_TTL_CORRELATION_HOURS:24}
+    paybill-reconciled-hours: ${REDIS_TTL_PAYBILL_RECONCILED_HOURS:1}
+    paybill-workflow-hours: ${REDIS_TTL_PAYBILL_WORKFLOW_HOURS:24}
+
 camel:
   server-port: 5000
   springboot:
