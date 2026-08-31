@@ -16,15 +16,14 @@ import org.mifos.connector.mpesa.utility.MpesaPaybillProp;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static org.apache.camel.Exchange.HTTP_RESPONSE_CODE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ACCOUNT_HOLDING_INSTITUTION_ID;
@@ -44,9 +43,6 @@ import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSFER_CREATE_FAI
 @Component
 public class PaybillRoute extends ErrorHandlerRouteBuilder {
 
-    public static final String RECONCILED_KEY_PREFIX = "mpesa:paybill:reconciled:";
-    public static final String WORKFLOW_INSTANCE_KEY_PREFIX = "mpesa:paybill:workflow:";
-
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -62,11 +58,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
     @Value("${tenant}")
     private String tenantId;
     @Autowired
-    private StringRedisTemplate redisTemplate;
-    @Value("${redis.ttl.paybill-reconciled-hours}")
-    private long reconciledTtlHours;
-    @Value("${redis.ttl.paybill-workflow-hours}")
-    private long workflowTtlHours;
+    private PaybillStateStore paybillStateStore;
 
     @Override
     public void configure() {
@@ -97,8 +89,7 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     Boolean reconciled = paybillResponseDTO.isReconciled();
                     String mpesaTxnId = paybillResponseDTO.getTransactionId();
                     String clientCorrelationId = mpesaTxnId;
-                    redisTemplate.opsForValue().set(RECONCILED_KEY_PREFIX + clientCorrelationId,
-                            reconciled.toString(), reconciledTtlHours, TimeUnit.HOURS);
+                    paybillStateStore.putReconciled(clientCorrelationId, reconciled);
                     String businessShortCode = e.getProperty(INITIATOR_FSP_ID, String.class);
                     GsmaTransfer gsmaTransfer = mpesaUtils.createGsmaTransferDTO(paybillResponseDTO, clientCorrelationId, businessShortCode);
                     e.getIn().removeHeaders("*");
@@ -162,12 +153,11 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     String workflowInstanceKey = channelResponse.getString("transactionId");
 
                     String clientCorrelationId = e.getIn().getHeader(CLIENT_CORRELATION_ID).toString();
-                    String reconciledStr = redisTemplate.opsForValue().get(RECONCILED_KEY_PREFIX + clientCorrelationId);
-                    Boolean reconciled = reconciledStr != null && Boolean.parseBoolean(reconciledStr);
+                    Boolean reconciled = paybillStateStore.getReconciled(clientCorrelationId);
+                    if (reconciled == null) reconciled = false;
 
-                    redisTemplate.opsForValue().set(WORKFLOW_INSTANCE_KEY_PREFIX + clientCorrelationId,
-                            workflowInstanceKey, workflowTtlHours, TimeUnit.HOURS);
-                    redisTemplate.delete(RECONCILED_KEY_PREFIX + clientCorrelationId);
+                    paybillStateStore.putWorkflowInstance(clientCorrelationId, workflowInstanceKey);
+                    paybillStateStore.removeReconciled(clientCorrelationId);
 
                     JSONObject responseObject = new JSONObject();
                     responseObject.put("ResultCode", reconciled ? 0 : 1);
@@ -209,8 +199,8 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
                     e.setProperty("CONFIRMATION_REQUEST", obj.toString());
 
                     String mpesaTransactionId = paybillConfirmationRequestDTO.getTransactionID();
-                    String transactionId = redisTemplate.opsForValue().get(WORKFLOW_INSTANCE_KEY_PREFIX + mpesaTransactionId);
-                    redisTemplate.delete(WORKFLOW_INSTANCE_KEY_PREFIX + mpesaTransactionId);
+                    String transactionId = paybillStateStore.getWorkflowInstance(mpesaTransactionId);
+                    paybillStateStore.removeWorkflowInstance(mpesaTransactionId);
 
                     Map<String, Object> variables = new HashMap<>();
                     variables.put("confirmationReceived", true);

@@ -3,11 +3,6 @@ package org.mifos.connector.mpesa.camel.routes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.camunda.zeebe.client.ZeebeClient;
@@ -23,18 +18,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mifos.connector.mpesa.dto.PaybillRequestDTO;
 import org.mifos.connector.mpesa.dto.PaybillResponseDTO;
+import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class PaybillRouteTest {
 
   @InjectMocks
@@ -47,17 +38,12 @@ class PaybillRouteTest {
   private ZeebeClient zeebeClient;
 
   @Mock
-  private StringRedisTemplate redisTemplate;
-
-  @Mock
-  private ValueOperations<String, String> valueOps;
+  private PaybillStateStore paybillStateStore;
 
   private CamelContext camelContext;
 
   @BeforeEach
   void setUp() throws Exception {
-    when(redisTemplate.opsForValue()).thenReturn(valueOps);
-
     camelContext = new DefaultCamelContext();
 
     RestConfiguration restConfiguration = new RestConfiguration();
@@ -128,7 +114,7 @@ class PaybillRouteTest {
 
   @Test
   void paybillResponseSuccess_shouldBuildResultResponse() {
-    when(valueOps.get(PaybillRoute.RECONCILED_KEY_PREFIX + "12345")).thenReturn("true");
+    when(paybillStateStore.getReconciled("12345")).thenReturn(true);
 
     String responseBody = "{\"transactionId\":\"workflow123\"}";
     Exchange exchange = new DefaultExchange(camelContext);
@@ -157,8 +143,6 @@ class PaybillRouteTest {
 
   @Test
   void confirmation_shouldPublishZeebeMessage() {
-    when(valueOps.get(PaybillRoute.WORKFLOW_INSTANCE_KEY_PREFIX + "12345")).thenReturn("workflow123");
-
     String requestBody =
         "{\"transactionID\":\"12345\",\"shortCode\":\"600000\",\"msisdn\":\"254700000000\",\"transactionAmount\":100,\"billRefNo\":\"123\"}";
 

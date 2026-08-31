@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.3.9
+
+        * [FD-1676] - Use redis as distributed storage from in memory storage
+
 ## Version 1.3.8
 
         * [FD-1888] - Harden Camel HttpClient pool (TTL/idle eviction) against Azure NAT/LB idle drops causing Connection reset to Safaricom

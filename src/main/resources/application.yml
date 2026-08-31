@@ -5,11 +5,13 @@ spring:
     password: ${REDIS_PASSWORD:}
     timeout: 2000ms
 
-redis:
-  ttl:
-    correlation-hours: ${REDIS_TTL_CORRELATION_HOURS:24}
-    paybill-reconciled-hours: ${REDIS_TTL_PAYBILL_RECONCILED_HOURS:1}
-    paybill-workflow-hours: ${REDIS_TTL_PAYBILL_WORKFLOW_HOURS:24}
+mpesa-connector:
+  redis:
+    key-prefix: ${REDIS_KEY_PREFIX:mpesa-connector}
+    ttl:
+      correlation-seconds: ${REDIS_TTL_CORRELATION_SECONDS:259200}
+      paybill-reconciled-seconds: ${REDIS_TTL_PAYBILL_RECONCILED_SECONDS:900}
+      paybill-workflow-seconds: ${REDIS_TTL_PAYBILL_WORKFLOW_SECONDS:172800}
 
 camel:
   server-port: 5000
