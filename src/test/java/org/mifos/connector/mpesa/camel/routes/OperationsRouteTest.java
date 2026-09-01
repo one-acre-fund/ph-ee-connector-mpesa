@@ -1,20 +1,25 @@
 package org.mifos.connector.mpesa.camel.routes;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.impl.DefaultCamelContext;
+import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.support.DefaultExchange;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mifos.connector.mpesa.flowcomponents.transaction.ErrorProcessor;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.annotation.Value;
-
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -22,19 +27,27 @@ class OperationsRouteTest {
 
   @InjectMocks private OperationsRoute operationsRoute;
 
-  private CamelContext camelContext = new DefaultCamelContext();
+  @Mock private ErrorProcessor errorProcessor;
 
-  @Value("${operations.host}")
-  private String operationsHost = "http://localhost";
+  private CamelContext camelContext;
 
-  @Value("${operations.base-url}")
-  private String operationsBaseUrl = "/api";
+  @BeforeEach
+  void setUp() throws Exception {
+    camelContext = new DefaultCamelContext();
 
-  @Value("${operations.filter-path}")
-  private String operationsFilterPath = "/filter";
+    RestConfiguration restConfiguration = new RestConfiguration();
+    restConfiguration.setComponent("jetty");
+    restConfiguration.setHost("localhost");
+    camelContext.setRestConfiguration(restConfiguration);
 
-  @Value("${tenant}")
-  private String tenantId = "testTenant";
+    camelContext.addRoutes(operationsRoute);
+    camelContext.start();
+  }
+
+  @AfterEach
+  void tearDown() {
+    camelContext.stop();
+  }
 
   @Test
   void filterByErrorCode_shouldReturnRecoverableError() throws Exception {
@@ -59,7 +72,6 @@ class OperationsRouteTest {
       Exchange exchange = new DefaultExchange(testContext);
       exchange.setProperty("ERROR_CODE", "1037");
 
-
       testContext.createProducerTemplate().send("direct:filter-by-error-code", exchange);
 
       assertEquals("true", exchange.getIn().getBody(String.class));
@@ -69,47 +81,36 @@ class OperationsRouteTest {
   }
 
   @Test
-  void filterResponseHandler_shouldProcessValidResponse() {
+  void filterResponseHandler_shouldProcessValidResponse() throws Exception {
     Exchange exchange = new DefaultExchange(camelContext);
-    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 200);
-    exchange.getIn().setBody("[{\"code\":\"1037\",\"description\":\"Recoverable error\"}]");
+    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, "200");
+    exchange.getIn().setBody("[{\"errorCode\":\"1037\",\"errorMessage\":\"Recoverable error\",\"recoverable\":true}]");
 
-    operationsRoute.configure();
+    camelContext.createProducerTemplate().send("direct:filter-response-handler", exchange);
 
-    assertEquals(200, exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE));
-
-    String responseBody = exchange.getIn().getBody(String.class);
-    assertNotNull(responseBody);
-    assertTrue(responseBody.contains("Recoverable error"));
+    verify(errorProcessor).process(any());
   }
 
   @Test
-  void filterResponseHandler_shouldHandleEmptyResponse() {
+  void filterResponseHandler_shouldHandleEmptyResponse() throws Exception {
     Exchange exchange = new DefaultExchange(camelContext);
-    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 200);
+    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, "200");
     exchange.getIn().setBody("[]");
 
-    operationsRoute.configure();
+    camelContext.createProducerTemplate().send("direct:filter-response-handler", exchange);
 
-    assertEquals(200, exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE));
-
-    String responseBody = exchange.getIn().getBody(String.class);
-    assertNotNull(responseBody);
-    assertEquals("[]", responseBody);
+    verify(errorProcessor).process(any());
   }
 
   @Test
-  void filterResponseHandler_shouldHandleInvalidResponse() {
+  void filterResponseHandler_shouldHandleNonOkResponse() throws Exception {
     Exchange exchange = new DefaultExchange(camelContext);
-    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 500);
-    exchange.getIn().setBody("Invalid response");
+    exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, "500");
+    exchange.getIn().setBody("[]");
 
-    operationsRoute.configure();
+    camelContext.createProducerTemplate().send("direct:filter-response-handler", exchange);
 
-    assertEquals(500, exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE));
-
-    String responseBody = exchange.getIn().getBody(String.class);
-    assertNotNull(responseBody);
-    assertEquals("Invalid response", responseBody);
+    verify(errorProcessor, never()).process(any());
+    assertFalse((Boolean) exchange.getProperty("isErrorRecoverable"));
   }
 }

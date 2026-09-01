@@ -26,7 +26,7 @@ public class OperationsRoute extends RouteBuilder {
     private String operationsFilterPath;
 
     @Value("${operations.timeout:60000}")
-    private Integer operationsTimeout;
+    private Integer operationsTimeout = 60000;
 
     @Value("${tenant}")
     private String tenantId;

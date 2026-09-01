@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -30,7 +31,6 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_CODE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_DESCRIPTION;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_API_RESPONSE;
-import static org.mifos.connector.mpesa.camel.routes.PaybillRoute.workflowInstanceStore;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.AMS;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.PARTY_LOOKUP_FSP_ID;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.SERVER_TRANSACTION_ID;
@@ -61,6 +61,9 @@ public class MpesaWorker {
 
     @Autowired
     private MpesaUtils mpesaUtils;
+
+    @Autowired
+    private PaybillStateStore paybillStateStore;
 
     @Value("${zeebe.client.evenly-allocated-max-jobs}")
     private int workerMaxJobs;
@@ -148,7 +151,7 @@ public class MpesaWorker {
                     Map<String, Object> variables = job.getVariablesAsMap();
                     String mpesaTxnId = variables.get("mpesaTxnId").toString();
                     logger.debug("Txn Id Removed :{}", mpesaTxnId);
-                    workflowInstanceStore.remove(mpesaTxnId);
+                    paybillStateStore.removeWorkflowInstance(mpesaTxnId);
                     Map<String, Object> completionVariables = new HashMap<>();
                     completionVariables.put(TRANSFER_CREATE_FAILED, true);
                     ZeebeCommandHelper.completeJob(client, job, completionVariables, requestTimeout, logger);
