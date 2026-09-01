@@ -154,8 +154,10 @@ public class PaybillRoute extends ErrorHandlerRouteBuilder {
 
                     String clientCorrelationId = e.getIn().getHeader(CLIENT_CORRELATION_ID).toString();
                     Boolean reconciled = paybillStateStore.getReconciled(clientCorrelationId);
-                    if (reconciled == null) reconciled = false;
-
+                    if (reconciled == null) {
+                        logger.warn("Missing reconciled state for clientCorrelationId={}, defaulting to rejected response", clientCorrelationId);
+                        reconciled = false;
+                    }
                     paybillStateStore.putWorkflowInstance(clientCorrelationId, workflowInstanceKey);
                     paybillStateStore.removeReconciled(clientCorrelationId);
 
