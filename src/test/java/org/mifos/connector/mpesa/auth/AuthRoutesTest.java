@@ -2,6 +2,7 @@ package org.mifos.connector.mpesa.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,8 +28,6 @@ class AuthRoutesTest {
   @Mock private AccessTokenStore accessTokenStore;
 
   @Mock private MpesaUtils mpesaUtils;
-
-  @Mock private ProducerTemplate producerTemplate;
 
   @InjectMocks private AuthRoutes authRoutes;
 
@@ -75,23 +74,48 @@ class AuthRoutesTest {
     mockMpesaProps.setAuthHost("http://test-host");
 
     when(mpesaUtils.setMpesaProperties()).thenReturn(mockMpesaProps);
+    when(accessTokenStore.getAccessToken()).thenReturn("test-token");
 
     CamelContext context = new DefaultCamelContext();
     context.addRoutes(authRoutes);
     context.start();
 
     try {
-      AccessTokenDTO token = new AccessTokenDTO();
-      token.setAccess_token("test-token");
-      token.setExpires_in(3600);
-
       Exchange exchange = new DefaultExchange(context);
-      exchange.getIn().setBody(token);
+      exchange.getIn().setBody("{\"access_token\":\"test-token\",\"expires_in\":3600}");
 
       ProducerTemplate template = context.createProducerTemplate();
       template.send("direct:access-token-save", exchange);
-      verify(mpesaUtils).setMpesaProperties();
 
+      verify(accessTokenStore).saveToken("test-token", 3600);
+      verify(accessTokenStore).getAccessToken();
+      verify(mpesaUtils).setMpesaProperties();
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Test
+  void getAccessToken_whenTokenValid_shouldSkipFetch() throws Exception {
+    MpesaProps.MPESA mockMpesaProps = new MpesaProps.MPESA();
+    mockMpesaProps.setName("TestMpesa");
+    mockMpesaProps.setClientKey("testKey");
+    mockMpesaProps.setClientSecret("testSecret");
+    mockMpesaProps.setAuthHost("http://test-host");
+
+    when(mpesaUtils.setMpesaProperties()).thenReturn(mockMpesaProps);
+    when(accessTokenStore.isValid()).thenReturn(true);
+
+    CamelContext context = new DefaultCamelContext();
+    context.addRoutes(authRoutes);
+    context.start();
+
+    try {
+      Exchange exchange = new DefaultExchange(context);
+      context.createProducerTemplate().send("direct:get-access-token", exchange);
+
+      verify(accessTokenStore).isValid();
+      verify(accessTokenStore, never()).saveToken(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt());
     } finally {
       context.stop();
     }
