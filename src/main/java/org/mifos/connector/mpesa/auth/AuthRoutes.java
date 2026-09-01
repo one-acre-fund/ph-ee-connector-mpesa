@@ -61,7 +61,7 @@ public class AuthRoutes extends RouteBuilder {
                 .process(exchange -> {
                     AccessTokenDTO dto = exchange.getIn().getBody(AccessTokenDTO.class);
                     accessTokenStore.saveToken(dto.getAccess_token(), dto.getExpires_in());
-                    logger.info("Saved Access Token: " + accessTokenStore.getAccessToken());
+                    logger.info("Saved Access Token");
                 });
 
         /*
