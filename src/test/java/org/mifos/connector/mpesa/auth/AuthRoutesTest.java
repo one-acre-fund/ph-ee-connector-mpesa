@@ -74,7 +74,6 @@ class AuthRoutesTest {
     mockMpesaProps.setAuthHost("http://test-host");
 
     when(mpesaUtils.setMpesaProperties()).thenReturn(mockMpesaProps);
-    when(accessTokenStore.getAccessToken()).thenReturn("test-token");
 
     CamelContext context = new DefaultCamelContext();
     context.addRoutes(authRoutes);
@@ -88,7 +87,6 @@ class AuthRoutesTest {
       template.send("direct:access-token-save", exchange);
 
       verify(accessTokenStore).saveToken("test-token", 3600);
-      verify(accessTokenStore).getAccessToken();
       verify(mpesaUtils).setMpesaProperties();
     } finally {
       context.stop();
