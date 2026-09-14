@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.Base64;
 
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
@@ -60,9 +59,9 @@ public class AuthRoutes extends RouteBuilder {
                 .id("access-token-save")
                 .unmarshal().json(JsonLibrary.Jackson, AccessTokenDTO.class)
                 .process(exchange -> {
-                    accessTokenStore.setAccessToken(exchange.getIn().getBody(AccessTokenDTO.class).getAccess_token());
-                    accessTokenStore.setExpiresOn(exchange.getIn().getBody(AccessTokenDTO.class).getExpires_in());
-                    logger.info("Saved Access Token: " + accessTokenStore.getAccessToken());
+                    AccessTokenDTO dto = exchange.getIn().getBody(AccessTokenDTO.class);
+                    accessTokenStore.saveToken(dto.getAccess_token(), dto.getExpires_in());
+                    logger.info("Saved Access Token");
                 });
 
         /*
@@ -88,7 +87,7 @@ public class AuthRoutes extends RouteBuilder {
         from("direct:get-access-token")
                 .id("get-access-token")
                 .choice()
-                .when(exchange -> accessTokenStore.isValid(LocalDateTime.now()))
+                .when(exchange -> accessTokenStore.isValid())
                 .log("Access token valid. Continuing.")
                 .otherwise()
                 .log("Access token expired or not present")

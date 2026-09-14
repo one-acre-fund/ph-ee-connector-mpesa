@@ -1,40 +1,29 @@
 package org.mifos.connector.mpesa.flowcomponents;
 
+import org.mifos.connector.mpesa.config.RedisStoreProperties;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Stream;
+import java.time.Duration;
 
 @Component
 public class CorrelationIDStore {
-    HashMap<String, String> correlation = new HashMap<>();
 
-    public HashMap<String, String> getCorrelation() {
-        return correlation;
-    }
+    private final StringRedisTemplate redisTemplate;
+    private final String keyPrefix;
+    private final long correlationTtlSeconds;
 
-    public void setCorrelation(HashMap<String, String> correlation) {
-        this.correlation = correlation;
+    public CorrelationIDStore(StringRedisTemplate redisTemplate, RedisStoreProperties props) {
+        this.redisTemplate = redisTemplate;
+        this.keyPrefix = props.getKeyPrefix() + ":correlation:";
+        this.correlationTtlSeconds = props.getTtl().getCorrelationSeconds();
     }
 
     public void addMapping(String serverCorrelation, String clientCorrelation) {
-        correlation.put(serverCorrelation, clientCorrelation);
+        redisTemplate.opsForValue().set(keyPrefix + serverCorrelation, clientCorrelation, Duration.ofSeconds(correlationTtlSeconds));
     }
 
-    public String getClientCorrelation (String serverCorrelation) {
-        return correlation.get(serverCorrelation);
-    }
-
-    public Stream<String> getServerCorrelations(String clientCorrelation) {
-        return correlation
-                .entrySet()
-                .stream()
-                .filter(entry -> clientCorrelation.equals(entry.getValue()))
-                .map(Map.Entry::getKey);
-    }
-
-    public boolean isClientCorrelationPresent (String clientCorrelation) {
-        return correlation.containsValue(clientCorrelation);
+    public String getClientCorrelation(String serverCorrelation) {
+        return redisTemplate.opsForValue().get(keyPrefix + serverCorrelation);
     }
 }

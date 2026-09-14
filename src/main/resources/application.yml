@@ -1,3 +1,18 @@
+spring:
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    timeout: 2000ms
+
+mpesa-connector:
+  redis:
+    key-prefix: ${REDIS_KEY_PREFIX:mpesa-connector}
+    ttl:
+      correlation-seconds: ${REDIS_TTL_CORRELATION_SECONDS:259200}
+      paybill-reconciled-seconds: ${REDIS_TTL_PAYBILL_RECONCILED_SECONDS:900}
+      paybill-workflow-seconds: ${REDIS_TTL_PAYBILL_WORKFLOW_SECONDS:172800}
+
 camel:
   server-port: 5000
   springboot:
