@@ -251,13 +251,33 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .to("direct:lipana-transaction-status")
                 .log(LoggingLevel.INFO, "Received status enquiry API response for transaction ${exchangeProperty." + TRANSACTION_ID + "} on ${header.Date} with response status: ${header.CamelHttpResponseCode}")
                 .log(LoggingLevel.INFO, "Transaction status API response body for transaction ${exchangeProperty." + TRANSACTION_ID + "}: ${body}")
-                .to("direct:transaction-status-response-handler")
+                .to("direct:safe-transaction-status-response-handler")
                 .otherwise()
                 .process(exchange -> {
                     exchange.setProperty(IS_RETRY_EXCEEDED, true);
                     exchange.setProperty(TRANSACTION_FAILED, true);
                 })
                 .process(collectionResponseProcessor);
+
+        /*
+         * Any failure while handling a status response must still go through collectionResponseProcessor,
+         * which is what persists the retry count and next timer. Otherwise the attempt is never counted
+         * and the status check loops forever without reaching the max retry count.
+         */
+        from("direct:safe-transaction-status-response-handler")
+                .id("safe-transaction-status-response-handler")
+                .doTry()
+                    .to("direct:transaction-status-response-handler")
+                .doCatch(Exception.class)
+                    .log(LoggingLevel.ERROR, "Failed to handle transaction status response for transaction ${exchangeProperty."
+                            + CORRELATION_ID + "}, keeping it pending: ${exception.message}")
+                    .process(exchange -> {
+                        exchange.setProperty(LAST_RESPONSE_BODY, exchange.getIn().getBody(String.class));
+                        exchange.setProperty(TRANSACTION_ID, exchange.getProperty(CORRELATION_ID));
+                        exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                    })
+                    .process(collectionResponseProcessor)
+                .end();
 
         /*
          * Route to handle async transaction status API responses
@@ -270,10 +290,17 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .log(LoggingLevel.INFO, "Transaction status request successful")
                 .process(exchange -> {
                     String body = exchange.getIn().getBody(String.class);
-                    JSONObject jsonObject = new JSONObject(body);
                     exchange.setProperty(LAST_RESPONSE_BODY, body);
                     Object correlationId = exchange.getProperty(CORRELATION_ID);
                     exchange.setProperty(TRANSACTION_ID, correlationId);
+
+                    if (body == null || body.isBlank()) {
+                        logger.info("Transaction status response for {} has an empty body; treating as pending.",
+                                correlationId);
+                        exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                        return;
+                    }
+                    JSONObject jsonObject = new JSONObject(body);
 
                     String serverId = jsonObject.optString("CheckoutRequestID", null);
                     if (serverId == null || serverId.isEmpty()) {
@@ -288,6 +315,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                                 "Transaction status response for {} has no ResultCode yet; treating as pending. Body: {}",
                                 correlationId, body);
                         exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                        return;
                     }
 
                     String resultCode = String.valueOf(jsonObject.get("ResultCode"));
@@ -309,8 +337,9 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .when(exchange -> exchange.getProperty(ERROR_CODE) != null)
                 .to("direct:filter-by-error-code")
                 .process(exchange -> {
-                    boolean isRecoverableError = exchange.getProperty(IS_ERROR_RECOVERABLE, Boolean.class);
-                    if(isRecoverableError) {
+                    // Default to non-recoverable if ops filter failed to set the flag
+                    // (prevents BPMN timer loop between transaction-callback and get-transaction-status)
+                    if (Boolean.TRUE.equals(exchange.getProperty(IS_ERROR_RECOVERABLE, Boolean.class))) {
                         exchange.setProperty(IS_TRANSACTION_PENDING, true);
                     } else {
                         exchange.setProperty(TRANSACTION_FAILED, true);

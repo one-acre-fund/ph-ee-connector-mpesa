@@ -1,5 +1,10 @@
 # Release Notes
 
+## Version 1.3.10
+
+        * [FD-1894] - Decouple MPESA transaction processing from operations-app availability as much as possible(use redis as cache for error filter and default to false)
+        * [FD-1899] - Fix configurable retry limit for recoverable M-Pesa collection errors( count every attempt on get status regardless the exception thrown)
+
 ## Version 1.3.9
 
         * [FD-1676] - Use redis as distributed storage from in memory storage

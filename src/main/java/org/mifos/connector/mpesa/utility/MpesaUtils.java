@@ -274,6 +274,10 @@ public class MpesaUtils {
     }
 
     public static String maskString(String strText) {
+        if (strText == null) {
+            return null;
+        }
+
 
         char maskChar = '*';
         int start = 0;

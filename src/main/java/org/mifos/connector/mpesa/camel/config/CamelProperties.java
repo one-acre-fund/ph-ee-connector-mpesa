@@ -25,6 +25,9 @@ public class CamelProperties {
     public static final String ERROR_CODE = "errorCode";
     public static final String ERROR_DESCRIPTION = "errorDescription";
     public static final String IS_ERROR_RECOVERABLE = "isErrorRecoverable";
+    public static final String CACHED_ERROR_CODE = "cachedErrorCode";
+    public static final String FILTER_ORIGINAL_HEADERS = "filterOriginalHeaders";
+    public static final String FILTER_ORIGINAL_BODY = "filterOriginalBody";
     public static final String LAST_RESPONSE_BODY = "lastResponseBody";
     public static final String DEPLOYED_PROCESS = "deployedProcess";
     public static final String CUSTOM_HEADER_FILTER_STRATEGY = "customHeaderFilterStrategy";

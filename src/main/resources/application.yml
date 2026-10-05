@@ -12,6 +12,8 @@ mpesa-connector:
       correlation-seconds: ${REDIS_TTL_CORRELATION_SECONDS:259200}
       paybill-reconciled-seconds: ${REDIS_TTL_PAYBILL_RECONCILED_SECONDS:900}
       paybill-workflow-seconds: ${REDIS_TTL_PAYBILL_WORKFLOW_SECONDS:172800}
+      error-code-fresh-seconds: ${REDIS_TTL_ERROR_CODE_FRESH_SECONDS:3600}
+      error-code-retention-seconds: ${REDIS_TTL_ERROR_CODE_RETENTION_SECONDS:2592000}
 
 camel:
   server-port: 5000

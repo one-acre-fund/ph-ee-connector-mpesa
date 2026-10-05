@@ -14,6 +14,8 @@ class RedisStorePropertiesTest {
         assertEquals(259200, properties.getTtl().getCorrelationSeconds());
         assertEquals(900, properties.getTtl().getPaybillReconciledSeconds());
         assertEquals(172800, properties.getTtl().getPaybillWorkflowSeconds());
+        assertEquals(3600, properties.getTtl().getErrorCodeFreshSeconds());
+        assertEquals(2592000, properties.getTtl().getErrorCodeRetentionSeconds());
     }
 
     @Test
@@ -23,6 +25,8 @@ class RedisStorePropertiesTest {
         ttl.setCorrelationSeconds(100);
         ttl.setPaybillReconciledSeconds(200);
         ttl.setPaybillWorkflowSeconds(300);
+        ttl.setErrorCodeFreshSeconds(400);
+        ttl.setErrorCodeRetentionSeconds(500);
 
         properties.setKeyPrefix("custom-prefix");
         properties.setTtl(ttl);
@@ -31,5 +35,7 @@ class RedisStorePropertiesTest {
         assertEquals(100, properties.getTtl().getCorrelationSeconds());
         assertEquals(200, properties.getTtl().getPaybillReconciledSeconds());
         assertEquals(300, properties.getTtl().getPaybillWorkflowSeconds());
+        assertEquals(400, properties.getTtl().getErrorCodeFreshSeconds());
+        assertEquals(500, properties.getTtl().getErrorCodeRetentionSeconds());
     }
 }

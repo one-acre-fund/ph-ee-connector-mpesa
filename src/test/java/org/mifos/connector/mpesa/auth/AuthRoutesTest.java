@@ -118,4 +118,59 @@ class AuthRoutesTest {
       context.stop();
     }
   }
+
+  @Test
+  void getAccessToken_whenExpired_shouldFetchAndSaveToken() throws Exception {
+    CamelContext context = contextWithMockedTokenEndpoint(200, "{\"access_token\":\"new-token\",\"expires_in\":3599}");
+    when(accessTokenStore.isValid()).thenReturn(false);
+
+    try {
+      Exchange exchange = context.createProducerTemplate().send("direct:get-access-token", e -> { });
+
+      verify(accessTokenStore).saveToken("new-token", 3599);
+      Exchange sent = context.getEndpoint("mock:token", org.apache.camel.component.mock.MockEndpoint.class)
+          .getReceivedExchanges().get(0);
+      assertEquals("GET", sent.getIn().getHeader(Exchange.HTTP_METHOD));
+      assertEquals("grant_type=client_credentials", sent.getIn().getHeader(Exchange.HTTP_RAW_QUERY));
+      org.junit.jupiter.api.Assertions.assertNull(exchange.getException());
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Test
+  void getAccessToken_whenFetchFails_shouldRecordError() throws Exception {
+    CamelContext context = contextWithMockedTokenEndpoint(401, "Unauthorized");
+    when(accessTokenStore.isValid()).thenReturn(false);
+
+    try {
+      Exchange exchange = context.createProducerTemplate().send("direct:get-access-token", e -> { });
+
+      verify(accessTokenStore, never()).saveToken(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt());
+      assertEquals("Unauthorized", exchange.getProperty(ERROR_INFORMATION));
+    } finally {
+      context.stop();
+    }
+  }
+
+  private CamelContext contextWithMockedTokenEndpoint(int status, String body) throws Exception {
+    MpesaProps.MPESA mockMpesaProps = new MpesaProps.MPESA();
+    mockMpesaProps.setName("TestMpesa");
+    mockMpesaProps.setClientKey("testKey");
+    mockMpesaProps.setClientSecret("testSecret");
+    mockMpesaProps.setAuthHost("http://test-host");
+    when(mpesaUtils.setMpesaProperties()).thenReturn(mockMpesaProps);
+
+    CamelContext context = new DefaultCamelContext();
+    context.addRoutes(authRoutes);
+    org.apache.camel.builder.AdviceWith.adviceWith(context, "access-token-fetch",
+        a -> a.weaveByToString("DynamicTo.*").replace().to("mock:token"));
+    context.start();
+    context.getEndpoint("mock:token", org.apache.camel.component.mock.MockEndpoint.class)
+        .whenAnyExchangeReceived(e -> {
+          e.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, status);
+          e.getMessage().setBody(body);
+        });
+    return context;
+  }
 }
