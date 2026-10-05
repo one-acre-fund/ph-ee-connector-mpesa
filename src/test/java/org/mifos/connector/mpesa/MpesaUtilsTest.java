@@ -158,8 +158,17 @@ class MpesaUtilsTest {
     }
 
     @Test
-    void main_shouldRun() {
-        MpesaUtils.main(new String[0]);
+    void main_shouldPrintMaskedSampleNumber() {
+        java.io.PrintStream original = System.out;
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        System.setOut(new java.io.PrintStream(output));
+        try {
+            MpesaUtils.main(new String[0]);
+        } finally {
+            System.setOut(original);
+        }
+
+        assertEquals("********4149", output.toString().trim());
     }
 
     private void withGroups(MpesaProps.MPESA... groups) {

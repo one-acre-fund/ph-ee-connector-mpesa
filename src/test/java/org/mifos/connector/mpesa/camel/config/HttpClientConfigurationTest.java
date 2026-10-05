@@ -6,6 +6,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class HttpClientConfigurationTest {
 
@@ -51,8 +52,11 @@ class HttpClientConfigurationTest {
 
     @Test
     void configureComponent_shouldIgnoreMissingComponent() {
-        ReflectionTestUtils.invokeMethod(configured(), "configureComponent",
-                null, new PoolingHttpClientConnectionManager());
+        HttpClientConfiguration configuration = configured();
+        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(configuration, "configureComponent",
+                null, connectionManager));
     }
 
     private static HttpClientConfiguration configured() {

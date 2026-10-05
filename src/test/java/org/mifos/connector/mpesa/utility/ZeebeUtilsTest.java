@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 class ZeebeUtilsTest {
 
@@ -25,8 +26,8 @@ class ZeebeUtilsTest {
     }
 
     @Test
-    void sleep_shouldReturnForZeroSeconds() {
-        ZeebeUtils.sleep(0);
+    void sleep_shouldReturnImmediatelyForZeroSeconds() {
+        assertTimeoutPreemptively(java.time.Duration.ofSeconds(1), () -> ZeebeUtils.sleep(0));
     }
 
     @Test

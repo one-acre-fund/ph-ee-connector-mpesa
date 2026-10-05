@@ -1,5 +1,6 @@
 package org.mifos.connector.mpesa.camel.routes;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
@@ -53,8 +54,10 @@ import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSACTION_FAILED;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSACTION_ID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,7 +137,7 @@ class SafaricomRoutesFlowTest {
     // ---- transaction status response handling ----
 
     @Test
-    void statusResponse_success_shouldMarkSucceededWithReceipt() throws Exception {
+    void statusResponse_success_shouldMarkSucceededWithReceipt() throws InterruptedException, JsonProcessingException {
         Exchange exchange = statusResponse(200,
                 "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"0\",\"MpesaReceiptNumber\":\"RKTQDM7W6S\"}");
 
@@ -150,7 +153,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_successWithoutCheckoutId_shouldKeepExistingServerId() throws Exception {
+    void statusResponse_successWithoutCheckoutId_shouldKeepExistingServerId() throws JsonProcessingException {
         Exchange exchange = statusResponse(200, "{\"ResultCode\":0}");
 
         assertNull(exchange.getException());
@@ -160,7 +163,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_nonRecoverableError_shouldMarkFailed() throws Exception {
+    void statusResponse_nonRecoverableError_shouldMarkFailed() throws JsonProcessingException {
         errorRecoverable = false;
 
         Exchange exchange = statusResponse(200,
@@ -174,7 +177,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_recoverableError_shouldStayPending() throws Exception {
+    void statusResponse_recoverableError_shouldStayPending() throws JsonProcessingException {
         errorRecoverable = true;
 
         Exchange exchange = statusResponse(200, "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"1037\"}");
@@ -186,7 +189,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_filterDidNotSetFlag_shouldDefaultToFailed() throws Exception {
+    void statusResponse_filterDidNotSetFlag_shouldDefaultToFailed() {
         errorRecoverable = null;
 
         Exchange exchange = statusResponse(200, "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"1037\"}");
@@ -195,7 +198,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_withoutResultCode_shouldStayPending() throws Exception {
+    void statusResponse_withoutResultCode_shouldStayPending() throws JsonProcessingException {
         Exchange exchange = statusResponse(200,
                 "{\"requestId\":\"r-1\",\"errorCode\":\"500.001.1001\",\"errorMessage\":\"The transaction is being processed\"}");
 
@@ -205,7 +208,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_500_shouldStayPendingWithErrorDetails() throws Exception {
+    void statusResponse_500_shouldStayPendingWithErrorDetails() throws JsonProcessingException {
         Exchange exchange = statusResponse(500,
                 "{\"requestId\":\"r-1\",\"errorCode\":\"500.001.1001\",\"errorMessage\":\"The transaction is being processed\"}");
 
@@ -218,7 +221,32 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_otherStatus_shouldMarkFailed() throws Exception {
+    void statusResponse_whenPublishingOutcomeFails_shouldNotSendASecondPendingUpdate() throws JsonProcessingException {
+        doThrow(new RuntimeException("Zeebe join timed out"))
+                .when(collectionResponseProcessor).process(any());
+
+        Exchange exchange = statusResponse(200,
+                "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"0\",\"MpesaReceiptNumber\":\"RKTQDM7W6S\"}");
+
+        verify(collectionResponseProcessor, times(1)).process(any());
+        assertNotNull(exchange.getException());
+        assertEquals(false, exchange.getProperty(TRANSACTION_FAILED));
+        assertNull(exchange.getProperty(IS_TRANSACTION_PENDING));
+    }
+
+    @Test
+    void statusResponse_500WithoutJsonBody_shouldStayPending() throws InterruptedException, JsonProcessingException {
+        Exchange exchange = statusResponse(500, "<html>Internal Server Error</html>");
+
+        assertNull(exchange.getException());
+        assertEquals(true, exchange.getProperty(IS_TRANSACTION_PENDING));
+        errorCodeFilter.expectedMessageCount(0);
+        errorCodeFilter.assertIsSatisfied();
+        verify(collectionResponseProcessor, times(1)).process(any());
+    }
+
+    @Test
+    void statusResponse_otherStatus_shouldMarkFailed() throws JsonProcessingException {
         Exchange exchange = statusResponse(400, "{\"errorCode\":\"400.002.02\"}");
 
         assertNull(exchange.getException());
@@ -230,7 +258,7 @@ class SafaricomRoutesFlowTest {
     // ---- transaction status base flow ----
 
     @Test
-    void statusBase_withinRetryLimit_shouldQueryMpesaAndHandleResponse() throws Exception {
+    void statusBase_withinRetryLimit_shouldQueryMpesaAndHandleResponse() throws JsonProcessingException {
         respondFromMpesa(200, "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"0\"}");
         Exchange exchange = new DefaultExchange(context);
         exchange.setProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT, 1);
@@ -254,7 +282,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusResponse_emptyBody_shouldStayPending() throws Exception {
+    void statusResponse_emptyBody_shouldStayPending() throws InterruptedException, JsonProcessingException {
         Exchange exchange = statusResponse(200, "");
 
         assertNull(exchange.getException());
@@ -266,7 +294,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusBase_emptyBody_shouldCountAttemptAndStayPending() throws Exception {
+    void statusBase_emptyBody_shouldCountAttemptAndStayPending() throws JsonProcessingException {
         respondFromMpesa(200, "");
 
         Exchange exchange = statusBaseExchange();
@@ -278,7 +306,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusBase_unparseableBody_shouldStillCountAttemptAndStayPending() throws Exception {
+    void statusBase_unparseableBody_shouldStillCountAttemptAndStayPending() throws JsonProcessingException {
         respondFromMpesa(200, "<html>Bad Gateway</html>");
 
         Exchange exchange = statusBaseExchange();
@@ -292,7 +320,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusBase_retryLimitExceeded_shouldFailWithoutQueryingMpesa() throws Exception {
+    void statusBase_retryLimitExceeded_shouldFailWithoutQueryingMpesa() throws InterruptedException, JsonProcessingException {
         Exchange exchange = new DefaultExchange(context);
         exchange.setProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT, 4);
 
@@ -306,7 +334,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void statusBase_ioError_shouldStayPending() throws Exception {
+    void statusBase_ioError_shouldStayPending() throws JsonProcessingException {
         mpesa.whenAnyExchangeReceived(e -> {
             throw new IOException("Connection reset");
         });
@@ -328,7 +356,7 @@ class SafaricomRoutesFlowTest {
     // ---- buy goods flow ----
 
     @Test
-    void buyGoodsBase_success_shouldSendStkPushAndSaveCorrelation() throws Exception {
+    void buyGoodsBase_success_shouldSendStkPushAndSaveCorrelation() throws JsonProcessingException {
         respondFromMpesa(200, "{\"MerchantRequestID\":\"m-1\",\"CheckoutRequestID\":\"ws_CO_1\",\"ResponseCode\":\"0\"}");
         Exchange exchange = buyGoodsExchange();
 
@@ -348,7 +376,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void buyGoodsBase_failure_shouldMarkFailed() throws Exception {
+    void buyGoodsBase_failure_shouldMarkFailed() {
         respondFromMpesa(400, "{\"errorCode\":\"400.002.02\",\"errorMessage\":\"Bad Request\"}");
         Exchange exchange = buyGoodsExchange();
 
@@ -361,7 +389,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void buyGoodsBase_ioError_shouldMarkFailedWithoutCallingCollectionProcessor() throws Exception {
+    void buyGoodsBase_ioError_shouldMarkFailedWithoutCallingCollectionProcessor() throws JsonProcessingException {
         mpesa.whenAnyExchangeReceived(e -> {
             throw new IOException("Connection reset");
         });
@@ -376,7 +404,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void restBuyGoods_shouldParseBodyAndStartBuyGoodsFlow() throws Exception {
+    void restBuyGoods_shouldParseBodyAndStartBuyGoodsFlow() {
         respondFromMpesa(200, "{\"CheckoutRequestID\":\"ws_CO_1\"}");
 
         Exchange exchange = template.send("direct:rest-buygoods", e -> {
@@ -407,7 +435,7 @@ class SafaricomRoutesFlowTest {
     // ---- callbacks ----
 
     @Test
-    void callback_success_shouldMarkSucceededWithReceiptAndAccept() throws Exception {
+    void callback_success_shouldMarkSucceededWithReceiptAndAccept() throws JsonProcessingException {
         when(correlationIDStore.getClientCorrelation("ws_CO_1")).thenReturn("tx-1");
 
         Exchange exchange = template.send("direct:rest-callback", e -> e.getIn().setBody(SUCCESS_CALLBACK));
@@ -423,7 +451,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void callback_nonRecoverableError_shouldMarkFailed() throws Exception {
+    void callback_nonRecoverableError_shouldMarkFailed() throws JsonProcessingException {
         errorRecoverable = false;
         when(correlationIDStore.getClientCorrelation("ws_CO_1")).thenReturn("tx-1");
 
@@ -436,7 +464,7 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
-    void callback_recoverableError_shouldWaitForStatusCheck() throws Exception {
+    void callback_recoverableError_shouldWaitForStatusCheck() throws JsonProcessingException {
         errorRecoverable = true;
         when(correlationIDStore.getClientCorrelation("ws_CO_1")).thenReturn("tx-1");
 

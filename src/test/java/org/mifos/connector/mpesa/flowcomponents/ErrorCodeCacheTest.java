@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ErrorCodeCacheTest {
@@ -100,7 +101,8 @@ class ErrorCodeCacheTest {
         doThrow(new RedisConnectionFailureException("down"))
                 .when(valueOperations).set(anyString(), anyString(), any(Duration.class));
 
-        errorCodeCache.put("1037", true);
+        assertDoesNotThrow(() -> errorCodeCache.put("1037", true));
+        verify(valueOperations).set(anyString(), anyString(), any(Duration.class));
     }
 
     @Test
