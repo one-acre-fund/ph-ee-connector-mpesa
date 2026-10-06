@@ -7,8 +7,22 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "mpesa-connector.redis")
 public class RedisStoreProperties {
 
+
+    private String type = "redis";
     private String keyPrefix = "mpesa-connector";
     private Ttl ttl = new Ttl();
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public boolean isMemoryStore() {
+        return "memory".equalsIgnoreCase(type);
+    }
 
     public String getKeyPrefix() {
         return keyPrefix;

@@ -7,6 +7,8 @@ spring:
 
 mpesa-connector:
   redis:
+    # redis (default) | memory — in-memory backup for paybill/access-token/correlation (not error-code cache)
+    type: ${MPESA_STORE_TYPE:redis}
     key-prefix: ${REDIS_KEY_PREFIX:mpesa-connector}
     ttl:
       correlation-seconds: ${REDIS_TTL_CORRELATION_SECONDS:259200}
