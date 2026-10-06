@@ -1,5 +1,7 @@
 package org.mifos.connector.mpesa.dto;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.mifos.connector.common.gsma.dto.CustomData;
@@ -125,6 +127,18 @@ class DtoTest {
         assertEquals("Request cancelled by user.", errorCode.getErrorMessage());
         assertEquals("1032", errorCode.getErrorCode());
         assertFalse(errorCode.isRecoverable());
+    }
+
+    @Test
+    void errorCode_shouldIgnoreUnknownFieldsFromOperations() throws Exception {
+        String json = "[{\"id\":3,\"createdDate\":\"2026-10-06T14:46:18\",\"transactionType\":\"collection\","
+                + "\"errorCode\":\"1037\",\"errorMessage\":\"DS timeout\",\"recoverable\":true}]";
+
+        List<ErrorCode> codes = new ObjectMapper().readValue(json, new TypeReference<List<ErrorCode>>() {});
+
+        assertEquals(1, codes.size());
+        assertEquals("1037", codes.get(0).getErrorCode());
+        assertTrue(codes.get(0).isRecoverable());
     }
 
     @Test

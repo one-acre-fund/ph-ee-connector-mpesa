@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,6 +29,7 @@ class PaybillStateStoreTest {
 
     private static final String KEY_PREFIX = "test-prefix";
     private static final String MPESA_TXN_ID = "txn-123";
+    private static final String OTHER_TXN_ID = "txn-999";
     private static final long RECONCILED_TTL_SECONDS = 900;
     private static final long WORKFLOW_TTL_SECONDS = 172800;
 
@@ -37,24 +39,14 @@ class PaybillStateStoreTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
-    private PaybillStateStore paybillStateStore;
-
     @BeforeEach
     void setUp() {
-        RedisStoreProperties properties = new RedisStoreProperties();
-        properties.setKeyPrefix(KEY_PREFIX);
-        RedisStoreProperties.Ttl ttl = new RedisStoreProperties.Ttl();
-        ttl.setPaybillReconciledSeconds(RECONCILED_TTL_SECONDS);
-        ttl.setPaybillWorkflowSeconds(WORKFLOW_TTL_SECONDS);
-        properties.setTtl(ttl);
-
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        paybillStateStore = new PaybillStateStore(redisTemplate, properties);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
     @Test
-    void putReconciled_shouldStoreBooleanAsStringWithTtl() {
-        paybillStateStore.putReconciled(MPESA_TXN_ID, true);
+    void redisPutReconciled_shouldStoreBooleanAsStringWithTtl() {
+        redisStore().putReconciled(MPESA_TXN_ID, true);
 
         ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
         verify(valueOperations).set(
@@ -66,36 +58,36 @@ class PaybillStateStoreTest {
     }
 
     @Test
-    void getReconciled_shouldReturnTrueWhenStoredAsTrue() {
+    void redisGetReconciled_shouldReturnTrueWhenStoredAsTrue() {
         when(valueOperations.get(reconciledKey(MPESA_TXN_ID))).thenReturn("true");
 
-        assertTrue(paybillStateStore.getReconciled(MPESA_TXN_ID));
+        assertTrue(redisStore().getReconciled(MPESA_TXN_ID));
     }
 
     @Test
-    void getReconciled_shouldReturnFalseWhenStoredAsFalse() {
+    void redisGetReconciled_shouldReturnFalseWhenStoredAsFalse() {
         when(valueOperations.get(reconciledKey(MPESA_TXN_ID))).thenReturn("false");
 
-        assertFalse(paybillStateStore.getReconciled(MPESA_TXN_ID));
+        assertFalse(redisStore().getReconciled(MPESA_TXN_ID));
     }
 
     @Test
-    void getReconciled_shouldReturnNullWhenMissing() {
+    void redisGetReconciled_shouldReturnNullWhenMissing() {
         when(valueOperations.get(reconciledKey(MPESA_TXN_ID))).thenReturn(null);
 
-        assertNull(paybillStateStore.getReconciled(MPESA_TXN_ID));
+        assertNull(redisStore().getReconciled(MPESA_TXN_ID));
     }
 
     @Test
-    void removeReconciled_shouldDeleteKey() {
-        paybillStateStore.removeReconciled(MPESA_TXN_ID);
+    void redisRemoveReconciled_shouldDeleteKey() {
+        redisStore().removeReconciled(MPESA_TXN_ID);
 
         verify(redisTemplate).delete(reconciledKey(MPESA_TXN_ID));
     }
 
     @Test
-    void putWorkflowInstance_shouldStoreWorkflowKeyWithTtl() {
-        paybillStateStore.putWorkflowInstance(MPESA_TXN_ID, "workflow-456");
+    void redisPutWorkflowInstance_shouldStoreWorkflowKeyWithTtl() {
+        redisStore().putWorkflowInstance(MPESA_TXN_ID, "workflow-456");
 
         ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
         verify(valueOperations).set(
@@ -107,17 +99,82 @@ class PaybillStateStoreTest {
     }
 
     @Test
-    void getWorkflowInstance_shouldReturnStoredValue() {
+    void redisGetWorkflowInstance_shouldReturnStoredValue() {
         when(valueOperations.get(workflowKey(MPESA_TXN_ID))).thenReturn("workflow-456");
 
-        assertEquals("workflow-456", paybillStateStore.getWorkflowInstance(MPESA_TXN_ID));
+        assertEquals("workflow-456", redisStore().getWorkflowInstance(MPESA_TXN_ID));
     }
 
     @Test
-    void removeWorkflowInstance_shouldDeleteKey() {
-        paybillStateStore.removeWorkflowInstance(MPESA_TXN_ID);
+    void redisRemoveWorkflowInstance_shouldDeleteKey() {
+        redisStore().removeWorkflowInstance(MPESA_TXN_ID);
 
         verify(redisTemplate).delete(workflowKey(MPESA_TXN_ID));
+    }
+
+    @Test
+    void memoryStore_shouldPutGetAndRemoveWithoutRedis() {
+        InMemoryPaybillStateStore store = memoryStore();
+
+        store.putReconciled(MPESA_TXN_ID, true);
+        assertTrue(store.getReconciled(MPESA_TXN_ID));
+        store.removeReconciled(MPESA_TXN_ID);
+        assertNull(store.getReconciled(MPESA_TXN_ID));
+
+        store.putWorkflowInstance(MPESA_TXN_ID, "workflow-456");
+        assertEquals("workflow-456", store.getWorkflowInstance(MPESA_TXN_ID));
+        store.removeWorkflowInstance(MPESA_TXN_ID);
+        assertNull(store.getWorkflowInstance(MPESA_TXN_ID));
+
+        verify(redisTemplate, never()).opsForValue();
+        verifyNoInteractions(valueOperations);
+    }
+
+    @Test
+    void memoryStore_shouldIsolateKeys() {
+        InMemoryPaybillStateStore store = memoryStore();
+
+        store.putWorkflowInstance(MPESA_TXN_ID, "workflow-a");
+        store.putWorkflowInstance(OTHER_TXN_ID, "workflow-b");
+        store.putReconciled(MPESA_TXN_ID, true);
+        store.putReconciled(OTHER_TXN_ID, false);
+
+        assertEquals("workflow-a", store.getWorkflowInstance(MPESA_TXN_ID));
+        assertEquals("workflow-b", store.getWorkflowInstance(OTHER_TXN_ID));
+        assertTrue(store.getReconciled(MPESA_TXN_ID));
+        assertFalse(store.getReconciled(OTHER_TXN_ID));
+
+        store.removeWorkflowInstance(MPESA_TXN_ID);
+        store.removeReconciled(MPESA_TXN_ID);
+
+        assertNull(store.getWorkflowInstance(MPESA_TXN_ID));
+        assertEquals("workflow-b", store.getWorkflowInstance(OTHER_TXN_ID));
+        assertNull(store.getReconciled(MPESA_TXN_ID));
+        assertFalse(store.getReconciled(OTHER_TXN_ID));
+    }
+
+    @Test
+    void logStoreBackend_shouldRunForBothBackends() {
+        redisStore().logStoreBackend();
+        memoryStore().logStoreBackend();
+    }
+
+    private RedisPaybillStateStore redisStore() {
+        return new RedisPaybillStateStore(redisTemplate, redisProperties());
+    }
+
+    private InMemoryPaybillStateStore memoryStore() {
+        return new InMemoryPaybillStateStore(redisProperties());
+    }
+
+    private RedisStoreProperties redisProperties() {
+        RedisStoreProperties properties = new RedisStoreProperties();
+        properties.setKeyPrefix(KEY_PREFIX);
+        RedisStoreProperties.Ttl ttl = new RedisStoreProperties.Ttl();
+        ttl.setPaybillReconciledSeconds(RECONCILED_TTL_SECONDS);
+        ttl.setPaybillWorkflowSeconds(WORKFLOW_TTL_SECONDS);
+        properties.setTtl(ttl);
+        return properties;
     }
 
     private String reconciledKey(String mpesaTxnId) {
