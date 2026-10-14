@@ -10,6 +10,13 @@ metadata:
     sonarqube.org/project-key: one-acre-fund_ph-ee-connector-mpesa
     backstage.io/code-coverage: sonarqube
     backstage.io/kubernetes-label-selector: 'app=ph-ee-connector-mpesa'
+    # Surfaces the Kong tab, showing this service's routes and plugins.
+    # The name is the one the Kong Ingress Controller generates from the
+    # Ingress (<namespace>.<service>.<port>), confirmed against the
+    # production Admin API. Pinned to production: the tab only queries
+    # the instances named here.
+    kong-manager/service-name: paymenthub.ph-ee-connector-mpesa.80
+    kong-manager/instance: production
   tags:
     - java
     - zeebe-connector
