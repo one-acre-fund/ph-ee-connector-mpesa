@@ -37,6 +37,8 @@ zeebe:
     keep-alive: 30s
     # Bound all command futures (.join) so worker slots cannot hang forever
     request-timeout: 30s
+    # Above the 60s mpesa.api.timeout so a provider call in flight is never cut short
+    job-timeout: 90s
   broker:
     contactpoint: "localhost:26500"
   init-transfer:
