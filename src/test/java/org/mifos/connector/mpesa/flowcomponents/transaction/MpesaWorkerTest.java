@@ -1,6 +1,7 @@
 package org.mifos.connector.mpesa.flowcomponents.transaction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.camunda.zeebe.client.api.response.ActivatedJob;
 import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.worker.JobHandler;
 import org.apache.camel.CamelContext;
@@ -10,6 +11,8 @@ import org.apache.camel.impl.DefaultCamelContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
+import org.mifos.connector.mpesa.flowcomponents.PaymentAttempt;
+import org.mifos.connector.mpesa.flowcomponents.PaymentAttemptStore;
 import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
@@ -21,9 +24,13 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.BUY_GOODS_REQUEST_BODY;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.CORRELATION_ID;
@@ -59,6 +66,7 @@ class MpesaWorkerTest {
     private MpesaUtils mpesaUtils;
     private PaybillStateStore paybillStateStore;
     private JobClient jobClient;
+    private PaymentAttemptStore paymentAttemptStore;
 
     @BeforeEach
     void setUp() {
@@ -78,6 +86,12 @@ class MpesaWorkerTest {
         ReflectionTestUtils.setField(worker, "safaricomUtils", safaricomUtils);
         ReflectionTestUtils.setField(worker, "mpesaUtils", mpesaUtils);
         ReflectionTestUtils.setField(worker, "paybillStateStore", paybillStateStore);
+        paymentAttemptStore = mock(PaymentAttemptStore.class);
+        when(paymentAttemptStore.claim(any())).thenReturn(true);
+        when(paymentAttemptStore.result(any())).thenReturn(Optional.empty());
+        ReflectionTestUtils.setField(worker, "paymentAttemptStore", paymentAttemptStore);
+        ReflectionTestUtils.setField(worker, "pendingRetryBackoff", Duration.ofSeconds(30));
+        ReflectionTestUtils.setField(worker, "pendingTimeout", Duration.ofMinutes(10));
         ReflectionTestUtils.setField(worker, "workerMaxJobs", 10);
         ReflectionTestUtils.setField(worker, "initTransferWaitTimer", 0);
         ReflectionTestUtils.setField(worker, "skipMpesa", false);
@@ -156,6 +170,114 @@ class MpesaWorkerTest {
         assertEquals("Unable to lock subscriber", completed.get(ERROR_DESCRIPTION));
         assertEquals("{\"errorCode\":\"500.001.1001\"}", completed.get(ERROR_INFORMATION));
         assertTrue(completed.containsKey(TRANSFER_RESPONSE_CREATE));
+    }
+
+    @Test
+    void initTransfer_success_shouldRecordTheAttempt() throws Exception {
+        when(safaricomUtils.channelRequestConvertor(any(), any(), any())).thenReturn(buyGoodsRequest());
+        doAnswer(invocation -> {
+            Exchange exchange = invocation.getArgument(1);
+            exchange.setProperty(TRANSACTION_FAILED, false);
+            exchange.setProperty(SERVER_TRANSACTION_ID, "ws_CO_1");
+            return exchange;
+        }).when(producerTemplate).send(eq("direct:buy-goods-base"), any(Exchange.class));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        ArgumentCaptor<PaymentAttempt> recorded = ArgumentCaptor.forClass(PaymentAttempt.class);
+        verify(paymentAttemptStore).claim("tx-1");
+        verify(paymentAttemptStore).recordResult(eq("tx-1"), recorded.capture());
+        assertEquals(false, recorded.getValue().isFailed());
+        assertEquals("ws_CO_1", recorded.getValue().getServerTransactionId());
+    }
+
+    @Test
+    void initTransfer_alreadyAttempted_shouldCompleteWithRecordedResultAndNotCallMpesa() throws Exception {
+        when(paymentAttemptStore.claim("tx-1")).thenReturn(false);
+        when(paymentAttemptStore.result("tx-1"))
+                .thenReturn(Optional.of(new PaymentAttempt(false, "ws_CO_1", null, null, null)));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        Map<String, Object> completed = completedVariables();
+        assertEquals(false, completed.get(TRANSACTION_FAILED));
+        assertEquals("ws_CO_1", completed.get(SERVER_TRANSACTION_ID));
+    }
+
+    @Test
+    void initTransfer_alreadyAttemptedAndStillPending_shouldReofferWithRetriesIntact() throws Exception {
+        when(paymentAttemptStore.claim("tx-1")).thenReturn(false);
+        when(paymentAttemptStore.pendingSince("tx-1")).thenReturn(Optional.of(Instant.now().minusSeconds(60)));
+        ActivatedJob job = ZeebeMocks.job(variables());
+        when(job.getRetries()).thenReturn(3);
+
+        initTransferHandler().handle(jobClient, job);
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        verify(jobClient, never()).newCompleteCommand(any(Long.class));
+        verify(jobClient.newFailCommand(1L)).retries(3);
+    }
+
+    @Test
+    void initTransfer_pendingLongerThanTheTimeout_shouldRaiseAnIncidentAndNeverPay() throws Exception {
+        when(paymentAttemptStore.claim("tx-1")).thenReturn(false);
+        when(paymentAttemptStore.pendingSince("tx-1")).thenReturn(Optional.of(Instant.now().minusSeconds(11 * 60)));
+        ActivatedJob job = ZeebeMocks.job(variables());
+        when(job.getRetries()).thenReturn(3);
+
+        initTransferHandler().handle(jobClient, job);
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        verify(paymentAttemptStore, never()).release(any());
+        ArgumentCaptor<PaymentAttempt> recorded = ArgumentCaptor.forClass(PaymentAttempt.class);
+        verify(paymentAttemptStore).recordResult(eq("tx-1"), recorded.capture());
+        assertEquals(true, recorded.getValue().isFailed());
+        assertEquals(MpesaWorker.OUTCOME_UNKNOWN, recorded.getValue().getErrorCode());
+        verify(jobClient.newFailCommand(1L)).retries(0);
+    }
+
+    @Test
+    void initTransfer_alreadyAttemptedAndFailed_shouldReplayTheErrorDetails() throws Exception {
+        when(paymentAttemptStore.claim("tx-1")).thenReturn(false);
+        when(paymentAttemptStore.result("tx-1")).thenReturn(Optional.of(new PaymentAttempt(
+                true, null, "500.001.1001", "Unable to lock subscriber", "{\"errorCode\":\"500.001.1001\"}")));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        Map<String, Object> completed = completedVariables();
+        assertEquals(true, completed.get(TRANSACTION_FAILED));
+        assertEquals("500.001.1001", completed.get(ERROR_CODE));
+        assertEquals("{\"errorCode\":\"500.001.1001\"}", completed.get(ERROR_INFORMATION));
+    }
+
+    @Test
+    void initTransfer_failureBeforeTheProviderCall_shouldReleaseTheClaim() {
+        Map<String, Object> variables = variables();
+        variables.put("mpesaChannelRequest", "not json");
+
+        JobHandler handler = initTransferHandler();
+        ActivatedJob job = ZeebeMocks.job(variables);
+
+        assertThrows(Exception.class, () -> handler.handle(jobClient, job));
+
+        verify(paymentAttemptStore).release("tx-1");
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+    }
+
+    @Test
+    void initTransfer_withoutTransactionId_shouldRefuseToPay() {
+        Map<String, Object> variables = variables();
+        variables.remove(TRANSACTION_ID);
+
+        JobHandler handler = initTransferHandler();
+        ActivatedJob job = ZeebeMocks.job(variables);
+
+        assertThrows(IllegalStateException.class, () -> handler.handle(jobClient, job));
+
+        verify(paymentAttemptStore, never()).claim(any());
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
     }
 
     @Test

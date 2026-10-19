@@ -47,6 +47,26 @@ public final class ZeebeCommandHelper {
         }
     }
 
+    /**
+     * Fails the job with an explicit retry count so Zeebe re-offers it after {@code retryBackoff};
+     * zero retries raises an incident instead.
+     */
+    public static void failJob(JobClient client, ActivatedJob job, String errorMessage, int retries,
+                               Duration retryBackoff, Duration timeout, Logger logger) {
+        try {
+            join(client.newFailCommand(job.getKey())
+                    .retries(Math.max(retries, 0))
+                    .retryBackoff(retryBackoff)
+                    .errorMessage(errorMessage)
+                    .send(), timeout);
+        } catch (Exception e) {
+            restoreInterruptStatus(e);
+            logger.error(
+                    "Fail command also failed for job {}; releasing worker slot without broker ack",
+                    job.getKey(), e);
+        }
+    }
+
     public static void failJob(JobClient client, ActivatedJob job, String errorMessage,
                                Duration timeout, Logger logger) {
         try {

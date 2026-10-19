@@ -46,6 +46,7 @@ public class RedisStoreProperties {
         private long paybillWorkflowSeconds = 172800;
         private long errorCodeFreshSeconds = 3600;
         private long errorCodeRetentionSeconds = 2592000;
+        private long paymentAttemptSeconds = 2592000;
 
         public long getCorrelationSeconds() {
             return correlationSeconds;
@@ -85,6 +86,14 @@ public class RedisStoreProperties {
 
         public void setErrorCodeRetentionSeconds(long errorCodeRetentionSeconds) {
             this.errorCodeRetentionSeconds = errorCodeRetentionSeconds;
+        }
+
+        public long getPaymentAttemptSeconds() {
+            return paymentAttemptSeconds;
+        }
+
+        public void setPaymentAttemptSeconds(long paymentAttemptSeconds) {
+            this.paymentAttemptSeconds = paymentAttemptSeconds;
         }
     }
 }
