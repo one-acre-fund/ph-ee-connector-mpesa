@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -161,6 +162,26 @@ class ZeebeCommandHelperTest {
         verify(failCommandStep1).retries(2);
         verify(failCommandStep2).errorMessage(errorCaptor.capture());
         assertTrue(errorCaptor.getValue().contains("Complete command failed"));
+        verify(failFuture).join(30_000L, TimeUnit.MILLISECONDS);
+    }
+
+    @Test
+    void failJob_withBackoff_setsRetriesBackoffAndMessage() {
+        when(job.getKey()).thenReturn(JOB_KEY);
+        @SuppressWarnings("unchecked")
+        ZeebeFuture<FailJobResponse> failFuture = mock(ZeebeFuture.class);
+        when(jobClient.newFailCommand(JOB_KEY)).thenReturn(failCommandStep1);
+        when(failCommandStep1.retries(2)).thenReturn(failCommandStep2);
+        when(failCommandStep2.retryBackoff(any(Duration.class))).thenReturn(failCommandStep2);
+        when(failCommandStep2.errorMessage(anyString())).thenReturn(failCommandStep2);
+        when(failCommandStep2.send()).thenReturn(failFuture);
+        when(failFuture.join(anyLong(), eq(TimeUnit.MILLISECONDS))).thenReturn(mock(FailJobResponse.class));
+
+        ZeebeCommandHelper.failJob(jobClient, job, "still pending", 2, Duration.ofSeconds(30), TIMEOUT, LOGGER);
+
+        verify(failCommandStep1).retries(2);
+        verify(failCommandStep2).retryBackoff(Duration.ofSeconds(30));
+        verify(failCommandStep2).errorMessage("still pending");
         verify(failFuture).join(30_000L, TimeUnit.MILLISECONDS);
     }
 
