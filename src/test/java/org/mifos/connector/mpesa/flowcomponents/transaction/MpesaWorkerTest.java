@@ -15,6 +15,8 @@ import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeMocks;
 import org.mockito.ArgumentCaptor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.mifos.connector.mpesa.flowcomponents.JobMetrics;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -62,6 +64,8 @@ class MpesaWorkerTest {
 
     @BeforeEach
     void setUp() {
+        JobMetrics jobMetrics = new JobMetrics(new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(jobMetrics, "workerMaxJobs", 10);
         zeebe = new ZeebeMocks();
         producerTemplate = mock(ProducerTemplate.class);
         safaricomUtils = mock(SafaricomUtils.class);
@@ -78,6 +82,7 @@ class MpesaWorkerTest {
         ReflectionTestUtils.setField(worker, "safaricomUtils", safaricomUtils);
         ReflectionTestUtils.setField(worker, "mpesaUtils", mpesaUtils);
         ReflectionTestUtils.setField(worker, "paybillStateStore", paybillStateStore);
+        ReflectionTestUtils.setField(worker, "jobMetrics", jobMetrics);
         ReflectionTestUtils.setField(worker, "workerMaxJobs", 10);
         ReflectionTestUtils.setField(worker, "initTransferWaitTimer", 0);
         ReflectionTestUtils.setField(worker, "skipMpesa", false);

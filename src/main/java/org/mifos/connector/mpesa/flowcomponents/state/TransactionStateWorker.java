@@ -8,6 +8,7 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.support.DefaultExchange;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
+import org.mifos.connector.mpesa.flowcomponents.JobMetrics;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.slf4j.Logger;
@@ -42,6 +43,9 @@ public class TransactionStateWorker {
     @Autowired
     private SafaricomUtils safaricomUtils;
 
+    @Autowired
+    private JobMetrics jobMetrics;
+
     @Value("${zeebe.client.evenly-allocated-max-jobs}")
     private int workerMaxJobs;
 
@@ -56,7 +60,7 @@ public class TransactionStateWorker {
 
         zeebeClient.newWorker()
                 .jobType("get-transaction-status")
-                .handler((client, job) -> {
+                .handler(jobMetrics.track("get-transaction-status", (client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {}", job.getType(), job.getBpmnProcessId(), job.getKey());
 
                     Map<String, Object> variables = job.getVariablesAsMap();
@@ -109,7 +113,7 @@ public class TransactionStateWorker {
                     }
 
                     ZeebeCommandHelper.completeJob(client, job, null, requestTimeout, logger);
-                    })
+                    }))
                 .name("get-transaction-status")
                 .maxJobsActive(workerMaxJobs)
                 .open();

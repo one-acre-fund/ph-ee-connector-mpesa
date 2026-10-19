@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.mifos.connector.mpesa.flowcomponents.JobMetrics;
 import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.springframework.stereotype.Component;
 
@@ -65,6 +66,9 @@ public class MpesaWorker {
     @Autowired
     private PaybillStateStore paybillStateStore;
 
+    @Autowired
+    private JobMetrics jobMetrics;
+
     @Value("${zeebe.client.evenly-allocated-max-jobs}")
     private int workerMaxJobs;
 
@@ -82,7 +86,7 @@ public class MpesaWorker {
 
         zeebeClient.newWorker()
                 .jobType("init-transfer")
-                .handler((client, job) -> {
+                .handler(jobMetrics.track("init-transfer", (client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {} and workflow instance key {}",
                         job.getType(), job.getBpmnProcessId(), job.getKey(), job.getProcessInstanceKey());
                     long t1 = System.currentTimeMillis();
@@ -139,14 +143,14 @@ public class MpesaWorker {
                     }
 
                     ZeebeCommandHelper.completeJob(client, job, variables, requestTimeout, logger);
-                })
+                }))
                 .name("init-transfer")
                 .maxJobsActive(workerMaxJobs)
                 .open();
 
         zeebeClient.newWorker()
                 .jobType("delete-workflow-instancekey")
-                .handler(((client, job) -> {
+                .handler(jobMetrics.track("delete-workflow-instancekey", (client, job) -> {
                     logger.info("Removing Workflow Instance key and Mpesa Txn Id from store");
                     Map<String, Object> variables = job.getVariablesAsMap();
                     String mpesaTxnId = variables.get("mpesaTxnId").toString();

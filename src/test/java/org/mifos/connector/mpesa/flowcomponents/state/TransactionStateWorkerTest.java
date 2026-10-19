@@ -12,6 +12,8 @@ import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeMocks;
 import org.mockito.ArgumentCaptor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.mifos.connector.mpesa.flowcomponents.JobMetrics;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -55,6 +57,8 @@ class TransactionStateWorkerTest {
 
     @BeforeEach
     void setUp() {
+        JobMetrics jobMetrics = new JobMetrics(new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(jobMetrics, "workerMaxJobs", 10);
         zeebe = new ZeebeMocks();
         producerTemplate = mock(ProducerTemplate.class);
         safaricomUtils = mock(SafaricomUtils.class);
@@ -66,6 +70,7 @@ class TransactionStateWorkerTest {
         ReflectionTestUtils.setField(worker, "producerTemplate", producerTemplate);
         ReflectionTestUtils.setField(worker, "camelContext", new DefaultCamelContext());
         ReflectionTestUtils.setField(worker, "safaricomUtils", safaricomUtils);
+        ReflectionTestUtils.setField(worker, "jobMetrics", jobMetrics);
         ReflectionTestUtils.setField(worker, "workerMaxJobs", 10);
         ReflectionTestUtils.setField(worker, "skipMpesa", false);
         ReflectionTestUtils.setField(worker, "requestTimeout", Duration.ofSeconds(5));
