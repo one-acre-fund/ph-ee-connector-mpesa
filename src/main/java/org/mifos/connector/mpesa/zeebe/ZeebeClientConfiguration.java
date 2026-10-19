@@ -22,6 +22,9 @@ public class ZeebeClientConfiguration {
     @Value("${zeebe.client.request-timeout}")
     private Duration requestTimeout;
 
+    @Value("${zeebe.client.job-timeout}")
+    private Duration jobTimeout;
+
     @Bean
     public ZeebeClient setup() {
         return ZeebeClient.newClientBuilder()
@@ -30,6 +33,7 @@ public class ZeebeClientConfiguration {
                 .numJobWorkerExecutionThreads(zeebeClientMaxThreads)
                 .keepAlive(keepAlive)
                 .defaultRequestTimeout(requestTimeout)
+                .defaultJobTimeout(jobTimeout)
                 .build();
     }
 }
