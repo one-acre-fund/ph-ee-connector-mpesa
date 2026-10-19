@@ -45,6 +45,9 @@ public class MpesaWorker {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
+    private static final String INIT_TRANSFER = "init-transfer";
+    private static final String DELETE_WORKFLOW_INSTANCE_KEY = "delete-workflow-instancekey";
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -85,8 +88,8 @@ public class MpesaWorker {
     public void setupWorkers() {
 
         zeebeClient.newWorker()
-                .jobType("init-transfer")
-                .handler(jobMetrics.track("init-transfer", (client, job) -> {
+                .jobType(INIT_TRANSFER)
+                .handler(jobMetrics.track(INIT_TRANSFER, (client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {} and workflow instance key {}",
                         job.getType(), job.getBpmnProcessId(), job.getKey(), job.getProcessInstanceKey());
                     long t1 = System.currentTimeMillis();
@@ -144,13 +147,13 @@ public class MpesaWorker {
 
                     ZeebeCommandHelper.completeJob(client, job, variables, requestTimeout, logger);
                 }))
-                .name("init-transfer")
+                .name(INIT_TRANSFER)
                 .maxJobsActive(workerMaxJobs)
                 .open();
 
         zeebeClient.newWorker()
-                .jobType("delete-workflow-instancekey")
-                .handler(jobMetrics.track("delete-workflow-instancekey", (client, job) -> {
+                .jobType(DELETE_WORKFLOW_INSTANCE_KEY)
+                .handler(jobMetrics.track(DELETE_WORKFLOW_INSTANCE_KEY, (client, job) -> {
                     logger.info("Removing Workflow Instance key and Mpesa Txn Id from store");
                     Map<String, Object> variables = job.getVariablesAsMap();
                     String mpesaTxnId = variables.get("mpesaTxnId").toString();

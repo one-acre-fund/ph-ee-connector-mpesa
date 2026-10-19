@@ -37,6 +37,8 @@ public class TransactionStateWorker {
     @Autowired
     private CamelContext camelContext;
 
+    private static final String GET_TRANSACTION_STATUS = "get-transaction-status";
+
     @Autowired
     private ZeebeClient zeebeClient;
 
@@ -59,8 +61,8 @@ public class TransactionStateWorker {
     public void setupWorkers() {
 
         zeebeClient.newWorker()
-                .jobType("get-transaction-status")
-                .handler(jobMetrics.track("get-transaction-status", (client, job) -> {
+                .jobType(GET_TRANSACTION_STATUS)
+                .handler(jobMetrics.track(GET_TRANSACTION_STATUS, (client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {}", job.getType(), job.getBpmnProcessId(), job.getKey());
 
                     Map<String, Object> variables = job.getVariablesAsMap();
@@ -114,7 +116,7 @@ public class TransactionStateWorker {
 
                     ZeebeCommandHelper.completeJob(client, job, null, requestTimeout, logger);
                     }))
-                .name("get-transaction-status")
+                .name(GET_TRANSACTION_STATUS)
                 .maxJobsActive(workerMaxJobs)
                 .open();
 
