@@ -13,10 +13,11 @@ metadata:
     # Surfaces the Kong tab, showing this service's routes and plugins.
     # The name is the one the Kong Ingress Controller generates from the
     # Ingress (<namespace>.<service>.<port>), confirmed against the
-    # production Admin API. Pinned to production: the tab only queries
-    # the instances named here.
+    # production Admin API. Same service name on production, qa and dev
+    # Kong; uat has no PaymentHub. Production first, so it is the selector
+    # default.
     kong-manager/service-name: paymenthub.ph-ee-connector-mpesa.80
-    kong-manager/instance: production
+    kong-manager/instance: production,qa,dev
   tags:
     - java
     - zeebe-connector
