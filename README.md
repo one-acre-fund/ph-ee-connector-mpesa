@@ -1,10 +1,10 @@
 # Safaricom mpesa connector
 Part of payment hub. It is a microservice for Safaricom mpesa connector.
 
-### Safaricom Documentation
+## Safaricom Documentation
 [developer.safaricom.co.ke](https://developer.safaricom.co.ke/)
 
-### Calls to Safaricom: timeouts, retries and circuit breaker
+## Calls to Safaricom: timeouts, retries and circuit breaker
 Every call to Safaricom (token, STK push, STK query) has its own timeouts, retries and circuit breaker
 (`mpesa-token`, `mpesa-stk-push`, `mpesa-stk-query`).
 
