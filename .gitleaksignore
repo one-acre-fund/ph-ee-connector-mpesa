@@ -1,0 +1,25 @@
+# Findings in git history that no PR can remove. The keys themselves must be treated as leaked
+# and rotated if they were ever real.
+# Safaricom client key, client secret, pass key and security credentials committed 2021-2022
+# in application.yml.
+0747e42225561ddc78283961660739b0a297d9c8:src/main/resources/application.yml:generic-api-key:22
+0c51ff9b2a481dbc60c493674cb6484e03337989:src/main/resources/application.yml:generic-api-key:37
+0ccf84c92c2d065f7f5da826061e2b3127d2450b:src/main/resources/application.yml:generic-api-key:58
+0ccf84c92c2d065f7f5da826061e2b3127d2450b:src/main/resources/application.yml:generic-api-key:59
+0ccf84c92c2d065f7f5da826061e2b3127d2450b:src/main/resources/application.yml:generic-api-key:61
+228292166f87b008a5695467b31bc9d3166969d2:src/main/resources/application.yml:generic-api-key:27
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:40
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:41
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:43
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:48
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:49
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:51
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:56
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:57
+bdd780fd448f9979768f417ad176e51b5c269ddb:src/main/resources/application.yml:generic-api-key:59
+c71b19031a700000c307f1971e8b30d12fc08790:src/main/resources/application.yml:generic-api-key:20
+c71b19031a700000c307f1971e8b30d12fc08790:src/main/resources/application.yml:generic-api-key:21
+e2bb86091500ca72caf10a8647d7633122687711:src/main/resources/application.yml:generic-api-key:24
+# Sample password in the BuyGoodsPaymentRequestDTO Javadoc, 2021 and 2023.
+95b6e42d9c6e3913ed4b092b2fcc66acfc4c3d0a:src/main/java/org/mifos/connector/mpesa/dto/BuyGoodsPaymentRequestDTO.java:generic-api-key:12
+e2bb86091500ca72caf10a8647d7633122687711:src/main/java/org/mifos/connector/mpesa/dto/BuyGoodsPaymentRequestDTO.java:generic-api-key:9
