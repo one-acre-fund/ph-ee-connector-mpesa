@@ -4,6 +4,10 @@
 
         * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice
 
+## Version 1.3.11
+
+        * [FD-1984] - Keep M-Pesa account settings per transaction so concurrent payments for different accounts don't use each other's shortcode, till or pass key
+
 ## Version 1.3.10
 
         * [FD-1894] - Decouple MPESA transaction processing from operations-app availability as much as possible(use redis as cache for error filter and default to false)

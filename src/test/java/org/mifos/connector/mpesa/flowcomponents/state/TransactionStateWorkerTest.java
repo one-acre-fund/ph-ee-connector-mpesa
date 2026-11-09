@@ -95,6 +95,7 @@ class TransactionStateWorkerTest {
             assertEquals(99L, exchange.getProperty(ZEEBE_ELEMENT_INSTANCE_KEY));
             assertEquals("PT30S", exchange.getProperty(TIMER));
             assertEquals("mpesa_flow_roster-kenya", exchange.getProperty(DEPLOYED_PROCESS));
+            assertEquals("roster", exchange.getProperty(AMS));
             return exchange;
         }).when(producerTemplate).send(eq("direct:get-transaction-status-base"), any(Exchange.class));
         Map<String, Object> variables = variables();

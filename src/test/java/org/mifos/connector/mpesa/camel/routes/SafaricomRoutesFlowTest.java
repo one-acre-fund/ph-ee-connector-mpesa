@@ -44,6 +44,7 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.IS_ERROR_RE
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.IS_RETRY_EXCEEDED;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.IS_TRANSACTION_PENDING;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.LAST_RESPONSE_BODY;
+import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_API_HOST;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.AMS;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.CALLBACK;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.CALLBACK_RECEIVED;
@@ -282,6 +283,28 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
+    void statusBase_shouldUseTheTransactionsAccount() {
+        MpesaProps.MPESA paygops = new MpesaProps.MPESA();
+        paygops.setName("paygops");
+        paygops.setApiHost("http://paygops-mpesa");
+        paygops.setPassKey("paygops-passkey");
+        when(mpesaUtils.getMpesaProperties("paygops", "tx-1")).thenReturn(paygops);
+        respondFromMpesa(200, "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"0\"}");
+        Exchange exchange = new DefaultExchange(context);
+        exchange.setProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT, 1);
+        exchange.setProperty(CORRELATION_ID, "tx-1");
+        exchange.setProperty(TRANSACTION_ID, "tx-1");
+        exchange.setProperty(AMS, "paygops");
+        exchange.setProperty(SERVER_TRANSACTION_ID, "ws_CO_1");
+        exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsRequest());
+
+        template.send("direct:get-transaction-status-base", exchange);
+
+        verify(safaricomUtils).getPassword("174379", "paygops-passkey", "20261005094948");
+        assertEquals("http://paygops-mpesa", mpesa.getReceivedExchanges().get(0).getProperty(MPESA_API_HOST));
+    }
+
+    @Test
     void statusResponse_emptyBody_shouldStayPending() throws InterruptedException, JsonProcessingException {
         Exchange exchange = statusResponse(200, "");
 
@@ -373,6 +396,25 @@ class SafaricomRoutesFlowTest {
                 mpesa.getReceivedExchanges().get(0).getIn().getBody(String.class), Map.class);
         assertEquals("generated-password", body.get("Password"));
         assertEquals("CustomerBuyGoodsOnline", body.get("TransactionType"));
+    }
+
+    @Test
+    void buyGoodsBase_shouldUseTheTransactionsAccount() {
+        MpesaProps.MPESA paygops = new MpesaProps.MPESA();
+        paygops.setName("paygops");
+        paygops.setApiHost("http://paygops-mpesa");
+        paygops.setBusinessShortCode("888888");
+        paygops.setTill("777777");
+        paygops.setPassKey("paygops-passkey");
+        when(mpesaUtils.getMpesaProperties("paygops", "tx-1")).thenReturn(paygops);
+        respondFromMpesa(200, "{\"MerchantRequestID\":\"m-1\",\"CheckoutRequestID\":\"ws_CO_1\",\"ResponseCode\":\"0\"}");
+        Exchange exchange = buyGoodsExchange();
+        exchange.setProperty(AMS, "paygops");
+
+        template.send("direct:buy-goods-base", exchange);
+
+        assertEquals("http://paygops-mpesa", mpesa.getReceivedExchanges().get(0).getProperty(MPESA_API_HOST));
+        assertEquals(777777L, exchange.getProperty(PARTY_LOOKUP_FSP_ID));
     }
 
     @Test

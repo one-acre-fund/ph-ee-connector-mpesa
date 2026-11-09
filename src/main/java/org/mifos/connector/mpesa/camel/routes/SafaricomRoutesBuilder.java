@@ -67,8 +67,6 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
 
     private final MpesaHttpCaller mpesaHttpCaller;
 
-    private MpesaProps.MPESA mpesaProps;
-
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     public SafaricomRoutesBuilder(ObjectMapper objectMapper, CollectionResponseProcessor collectionResponseProcessor,
@@ -89,8 +87,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
 
     @Override
     public void configure() {
-        mpesaProps = mpesaUtils.setMpesaProperties();
-        logger.info("AMS Name set by configure" + mpesaProps.getName());
+        MpesaProps.MPESA defaultProps = mpesaUtils.setMpesaProperties();
+        logger.info("AMS Name set by configure {}", defaultProps.getName());
 
         // Transport failures (e.g. Connection reset from dead keep-alive after NAT idle drop)
         // must not blow up Zeebe workers; status stays pending, buy-goods is marked failed.
@@ -428,10 +426,11 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .setBody(exchange -> {
                     String ams = exchange.getProperty(AMS, String.class);
                     String transactionId = exchange.getProperty(CORRELATION_ID, String.class);
-                    mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
+                    MpesaProps.MPESA mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
                     logger.info("MPESA properties for transaction with id {}: AMS - {}, Shortcode - {}, TILL - {}",
                         transactionId, mpesaProps.getName(), mpesaProps.getBusinessShortCode(), mpesaProps.getTill());
                     exchange.setProperty(PARTY_LOOKUP_FSP_ID, mpesaProps.getTill());
+                    exchange.setProperty(MPESA_API_HOST, mpesaProps.getApiHost());
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
 
@@ -449,8 +448,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return buyGoodsPaymentRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_PUSH, constant(
-                        mpesaProps.getApiHost() + buyGoodsLipanaUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
+                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_PUSH, simple(
+                        "${exchangeProperty." + MPESA_API_HOST + "}" + buyGoodsLipanaUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
                 .id("stk-push-call")
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA API called, response: \n\n ${body}");
@@ -465,6 +464,9 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .setHeader("Authorization", simple("Bearer ${exchangeProperty."+ACCESS_TOKEN+"}"))
                 .setBody(exchange -> {
                     TransactionStatusRequestDTO transactionStatusRequestDTO = new TransactionStatusRequestDTO();
+                    MpesaProps.MPESA mpesaProps = mpesaUtils.getMpesaProperties(
+                            exchange.getProperty(AMS, String.class), exchange.getProperty(TRANSACTION_ID, String.class));
+                    exchange.setProperty(MPESA_API_HOST, mpesaProps.getApiHost());
 
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
@@ -486,8 +488,8 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return  transactionStatusRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_QUERY, constant(
-                        mpesaProps.getApiHost() + transactionStatusUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
+                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_QUERY, simple(
+                        "${exchangeProperty." + MPESA_API_HOST + "}" + transactionStatusUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
                 .id("stk-query-call")
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA STATUS called, response: \n\n ${body}");
