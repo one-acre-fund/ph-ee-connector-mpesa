@@ -16,6 +16,7 @@ jacoco {
 }
 
 def phConnectorCommonVersion = '1.5.1-gazelle'
+def resilience4jVersion = '2.2.0'
 repositories {
     mavenCentral()
     maven {
@@ -47,6 +48,11 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
     implementation 'io.micrometer:micrometer-registry-prometheus:1.8.0'
+    implementation "io.github.resilience4j:resilience4j-circuitbreaker:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-retry:${resilience4jVersion}"
+    implementation "io.github.resilience4j:resilience4j-micrometer:${resilience4jVersion}"
+    testImplementation 'com.github.tomakehurst:wiremock-jre8-standalone:2.35.2'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
 }
 
 

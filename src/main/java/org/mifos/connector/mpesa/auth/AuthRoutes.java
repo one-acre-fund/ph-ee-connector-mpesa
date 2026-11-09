@@ -5,13 +5,13 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.mifos.connector.common.gsma.dto.AccessTokenDTO;
-import org.mifos.connector.mpesa.utility.ConnectionUtils;
+import org.mifos.connector.mpesa.resilience.MpesaEndpoint;
+import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -28,8 +28,8 @@ public class AuthRoutes extends RouteBuilder {
     @Autowired
     private MpesaUtils mpesautils;
 
-    @Value("${mpesa.api.timeout}")
-    private Integer mpesaTimeout;
+    @Autowired
+    private MpesaHttpCaller mpesaHttpCaller;
 
     private MpesaProps.MPESA mpesaProps;
 
@@ -78,8 +78,9 @@ public class AuthRoutes extends RouteBuilder {
                 .setHeader(Exchange.HTTP_METHOD, constant("GET"))
                 .setHeader("Authorization", simple("Basic " + createAuthHeader(mpesaProps.getClientKey(),mpesaProps.getClientSecret())))
                 .setHeader(Exchange.HTTP_RAW_QUERY, constant("grant_type=client_credentials"))
-                .toD(mpesaProps.getAuthHost() + "?bridgeEndpoint=true" + "&" +
-                        "throwExceptionOnFailure=false&" + ConnectionUtils.getConnectionTimeoutDsl(mpesaTimeout));
+                .process(mpesaHttpCaller.call(MpesaEndpoint.TOKEN,
+                        constant(mpesaProps.getAuthHost() + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
+                .id("access-token-call");
 
         /*
           Access Token check validity and return value

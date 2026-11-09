@@ -1,5 +1,6 @@
 package org.mifos.connector.mpesa.camel.routes;
 
+import static org.mockito.Mockito.mock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +28,7 @@ import org.mifos.connector.mpesa.flowcomponents.transaction.TransactionResponseP
 import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
+import org.mifos.connector.mpesa.resilience.TestCallers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -67,9 +69,9 @@ class SafaricomRoutesBuilderTest {
             accessTokenStore,
             correlationIDStore,
             safaricomUtils,
-            mpesaUtils);
+            mpesaUtils,
+            TestCallers.caller(mock(ProducerTemplate.class)));
 
-    ReflectionTestUtils.setField(routesBuilder, "mpesaTimeout", 5000);
     ReflectionTestUtils.setField(routesBuilder, "buyGoodsLipanaUrl", "http://mock-lipana-url");
     ReflectionTestUtils.setField(
         routesBuilder, "transactionStatusUrl", "http://mock-transaction-status-url");

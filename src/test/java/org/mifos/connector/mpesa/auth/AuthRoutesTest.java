@@ -2,6 +2,7 @@ package org.mifos.connector.mpesa.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mifos.connector.common.gsma.dto.AccessTokenDTO;
 import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
+import org.mifos.connector.mpesa.resilience.TestCallers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,7 +37,7 @@ class AuthRoutesTest {
   void setUp() {
     ReflectionTestUtils.setField(authRoutes, "accessTokenStore", accessTokenStore);
     ReflectionTestUtils.setField(authRoutes, "mpesautils", mpesaUtils);
-    ReflectionTestUtils.setField(authRoutes, "mpesaTimeout", 5000);
+    ReflectionTestUtils.setField(authRoutes, "mpesaHttpCaller", TestCallers.caller(mock(ProducerTemplate.class)));
   }
 
   @Test
@@ -164,7 +166,7 @@ class AuthRoutesTest {
     CamelContext context = new DefaultCamelContext();
     context.addRoutes(authRoutes);
     org.apache.camel.builder.AdviceWith.adviceWith(context, "access-token-fetch",
-        a -> a.weaveByToString("DynamicTo.*").replace().to("mock:token"));
+        a -> a.weaveById("access-token-call").replace().to("mock:token"));
     context.start();
     context.getEndpoint("mock:token", org.apache.camel.component.mock.MockEndpoint.class)
         .whenAnyExchangeReceived(e -> {
