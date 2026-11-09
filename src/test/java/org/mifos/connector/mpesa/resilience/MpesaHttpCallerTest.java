@@ -308,9 +308,10 @@ class MpesaHttpCallerTest {
         });
         MpesaHttpCaller localCaller = TestCallers.caller(failing, properties);
         final Exchange exchange = newExchange();
+        final String uri = url();
 
         RuntimeCamelException thrown = assertThrows(RuntimeCamelException.class,
-                () -> localCaller.call(MpesaEndpoint.STK_PUSH, url(), exchange));
+                () -> localCaller.call(MpesaEndpoint.STK_PUSH, uri, exchange));
 
         assertTrue(thrown.getCause() instanceof TimeoutException);
         verify(failing, times(1)).send(anyString(), any(Exchange.class));
