@@ -12,10 +12,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.mifos.connector.mpesa.safaricom.config.SafaricomProperties.MPESA_BUY_GOODS_TRANSACTION_TYPE;
@@ -34,20 +35,16 @@ public class SafaricomUtils {
     @Value("${mpesa.local.transaction-callback}")
     private String callbackEndpoint;
 
-    private MpesaProps.MPESA mpesaProps;
-
-
-
-    private final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
 
     public BuyGoodsPaymentRequestDTO channelRequestConvertor(TransactionChannelC2BRequestDTO transactionChannelRequestDTO, String transactionId, String ams) {
         logger.info("TransactionChannelCollectionRequestDTO chile converting " + transactionChannelRequestDTO);
         BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = new BuyGoodsPaymentRequestDTO();
-        mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
+        MpesaProps.MPESA mpesaProps = mpesaUtils.getMpesaProperties(ams, transactionId);
 
         long amount = Long.parseLong(transactionChannelRequestDTO.getAmount().getAmount().trim());
-        long timestamp = getTimestamp(); //123; //Long.parseLong(sdf.format(new Date()));
+        long timestamp = getTimestamp();
         long payer;
 
         GsmaParty[] party = transactionChannelRequestDTO.getPayer();
@@ -84,7 +81,7 @@ public class SafaricomUtils {
     }
 
     public Long getTimestamp() {
-        return Long.parseLong(sdf.format(new Date()));
+        return Long.parseLong(LocalDateTime.now(ZoneId.systemDefault()).format(TIMESTAMP_FORMAT));
     }
 
     /*

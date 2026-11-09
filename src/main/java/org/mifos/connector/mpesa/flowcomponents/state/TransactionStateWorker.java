@@ -104,6 +104,7 @@ public class TransactionStateWorker {
                         exchange.setProperty(ZEEBE_ELEMENT_INSTANCE_KEY, job.getElementInstanceKey());
                         exchange.setProperty(TIMER, variables.get(TIMER));
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
+                        exchange.setProperty(AMS, ams);
 
                         producerTemplate.send("direct:get-transaction-status-base", exchange);
                     }

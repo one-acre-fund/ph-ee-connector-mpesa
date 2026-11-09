@@ -4,6 +4,7 @@ import org.mifos.connector.mpesa.config.RedisStoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +12,7 @@ import javax.annotation.PostConstruct;
 import java.util.concurrent.TimeUnit;
 
 @Component
+@Primary
 @ConditionalOnExpression("!'${mpesa-connector.redis.type:redis}'.equalsIgnoreCase('memory')")
 public class RedisAccessTokenStore implements AccessTokenStore {
 
