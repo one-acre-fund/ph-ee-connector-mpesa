@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.4.0
+
+        * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice
+
 ## Version 1.3.10
 
         * [FD-1894] - Decouple MPESA transaction processing from operations-app availability as much as possible(use redis as cache for error filter and default to false)
