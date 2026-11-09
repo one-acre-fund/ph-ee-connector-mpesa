@@ -10,12 +10,22 @@ import org.mifos.connector.mpesa.dto.StkCallback;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mifos.connector.mpesa.safaricom.config.SafaricomProperties.MPESA_BUY_GOODS_TRANSACTION_TYPE;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 class SafaricomUtilsTest {
@@ -92,6 +102,56 @@ class SafaricomUtilsTest {
     @Test
     void getTimestamp_shouldBeFourteenDigits() {
         assertTrue(String.valueOf(safaricomUtils.getTimestamp()).matches("\\d{14}"));
+    }
+
+    @Test
+    void channelRequestConvertor_concurrentPayments_shouldEachUseTheirOwnAccount() throws Exception {
+        MpesaProps.MPESA paygops = props();
+        paygops.setName("paygops");
+        paygops.setBusinessShortCode("888888");
+        paygops.setTill("777777");
+        paygops.setPassKey("paygops-passkey");
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        when(mpesaUtils.getMpesaProperties("paygops", "tx-2")).thenReturn(paygops);
+        SafaricomUtils utils = spy(safaricomUtils);
+        CountDownLatch secondDone = new CountDownLatch(1);
+        // The roster payment pauses after loading its account until the paygops payment is fully built.
+        doAnswer(invocation -> {
+            if ("roster-thread".equals(Thread.currentThread().getName())) {
+                assertTrue(secondDone.await(5, TimeUnit.SECONDS));
+            }
+            return 20261005094948L;
+        }).when(utils).getTimestamp();
+        TransactionChannelC2BRequestDTO request = channelRequest("MSISDN", "254708374149", "ACCOUNTID", "12345");
+        AtomicReference<BuyGoodsPaymentRequestDTO> roster = new AtomicReference<>();
+        Thread rosterThread = new Thread(() -> roster.set(utils.channelRequestConvertor(request, "tx-1", "roster")),
+                "roster-thread");
+
+        rosterThread.start();
+        BuyGoodsPaymentRequestDTO paygopsRequest = utils.channelRequestConvertor(request, "tx-2", "paygops");
+        secondDone.countDown();
+        rosterThread.join(5000);
+
+        assertEquals(888888L, paygopsRequest.getBusinessShortCode());
+        assertEquals(174379L, roster.get().getBusinessShortCode());
+        assertEquals(600000L, roster.get().getPartyB());
+        assertEquals(utils.getPassword("174379", "passkey", "20261005094948"), roster.get().getPassword());
+    }
+
+    @Test
+    void getTimestamp_calledConcurrently_shouldAlwaysBeFourteenDigits() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<Long>> timestamps = new ArrayList<>();
+            for (int i = 0; i < 2000; i++) {
+                timestamps.add(pool.submit(safaricomUtils::getTimestamp));
+            }
+            for (Future<Long> timestamp : timestamps) {
+                assertTrue(String.valueOf(timestamp.get()).matches("\\d{14}"));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private static MpesaProps.MPESA props() {

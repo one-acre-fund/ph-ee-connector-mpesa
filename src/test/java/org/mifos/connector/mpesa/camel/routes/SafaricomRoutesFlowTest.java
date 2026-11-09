@@ -282,6 +282,26 @@ class SafaricomRoutesFlowTest {
     }
 
     @Test
+    void statusBase_shouldSignWithThePassKeyOfTheTransactionsAccount() {
+        MpesaProps.MPESA paygops = new MpesaProps.MPESA();
+        paygops.setName("paygops");
+        paygops.setPassKey("paygops-passkey");
+        when(mpesaUtils.getMpesaProperties("paygops", "tx-1")).thenReturn(paygops);
+        respondFromMpesa(200, "{\"CheckoutRequestID\":\"ws_CO_1\",\"ResultCode\":\"0\"}");
+        Exchange exchange = new DefaultExchange(context);
+        exchange.setProperty(SERVER_TRANSACTION_STATUS_RETRY_COUNT, 1);
+        exchange.setProperty(CORRELATION_ID, "tx-1");
+        exchange.setProperty(TRANSACTION_ID, "tx-1");
+        exchange.setProperty(AMS, "paygops");
+        exchange.setProperty(SERVER_TRANSACTION_ID, "ws_CO_1");
+        exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsRequest());
+
+        template.send("direct:get-transaction-status-base", exchange);
+
+        verify(safaricomUtils).getPassword("174379", "paygops-passkey", "20261005094948");
+    }
+
+    @Test
     void statusResponse_emptyBody_shouldStayPending() throws InterruptedException, JsonProcessingException {
         Exchange exchange = statusResponse(200, "");
 
