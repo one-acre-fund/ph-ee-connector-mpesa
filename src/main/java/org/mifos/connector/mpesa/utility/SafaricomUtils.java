@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -80,7 +81,7 @@ public class SafaricomUtils {
     }
 
     public Long getTimestamp() {
-        return Long.parseLong(LocalDateTime.now().format(TIMESTAMP_FORMAT));
+        return Long.parseLong(LocalDateTime.now(ZoneId.systemDefault()).format(TIMESTAMP_FORMAT));
     }
 
     /*

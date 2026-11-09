@@ -86,7 +86,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
     @Override
     public void configure() {
         MpesaProps.MPESA defaultProps = mpesaUtils.setMpesaProperties();
-        logger.info("AMS Name set by configure" + defaultProps.getName());
+        logger.info("AMS Name set by configure {}", defaultProps.getName());
 
         // Transport failures (e.g. Connection reset from dead keep-alive after NAT idle drop)
         // must not blow up Zeebe workers; status stays pending, buy-goods is marked failed.
