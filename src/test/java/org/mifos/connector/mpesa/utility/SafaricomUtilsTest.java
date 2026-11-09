@@ -18,7 +18,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -114,28 +113,33 @@ class SafaricomUtilsTest {
         when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
         when(mpesaUtils.getMpesaProperties("paygops", "tx-2")).thenReturn(paygops);
         SafaricomUtils utils = spy(safaricomUtils);
+        CountDownLatch rosterLoaded = new CountDownLatch(1);
         CountDownLatch secondDone = new CountDownLatch(1);
         // The roster payment pauses after loading its account until the paygops payment is fully built.
         doAnswer(invocation -> {
             if ("roster-thread".equals(Thread.currentThread().getName())) {
+                rosterLoaded.countDown();
                 assertTrue(secondDone.await(5, TimeUnit.SECONDS));
             }
             return 20261005094948L;
         }).when(utils).getTimestamp();
         TransactionChannelC2BRequestDTO request = channelRequest("MSISDN", "254708374149", "ACCOUNTID", "12345");
-        AtomicReference<BuyGoodsPaymentRequestDTO> roster = new AtomicReference<>();
-        Thread rosterThread = new Thread(() -> roster.set(utils.channelRequestConvertor(request, "tx-1", "roster")),
-                "roster-thread");
+        ExecutorService pool = Executors.newSingleThreadExecutor(r -> new Thread(r, "roster-thread"));
+        try {
+            Future<BuyGoodsPaymentRequestDTO> roster =
+                    pool.submit(() -> utils.channelRequestConvertor(request, "tx-1", "roster"));
+            assertTrue(rosterLoaded.await(5, TimeUnit.SECONDS));
+            BuyGoodsPaymentRequestDTO paygopsRequest = utils.channelRequestConvertor(request, "tx-2", "paygops");
+            secondDone.countDown();
+            BuyGoodsPaymentRequestDTO rosterRequest = roster.get(5, TimeUnit.SECONDS);
 
-        rosterThread.start();
-        BuyGoodsPaymentRequestDTO paygopsRequest = utils.channelRequestConvertor(request, "tx-2", "paygops");
-        secondDone.countDown();
-        rosterThread.join(5000);
-
-        assertEquals(888888L, paygopsRequest.getBusinessShortCode());
-        assertEquals(174379L, roster.get().getBusinessShortCode());
-        assertEquals(600000L, roster.get().getPartyB());
-        assertEquals(utils.getPassword("174379", "passkey", "20261005094948"), roster.get().getPassword());
+            assertEquals(888888L, paygopsRequest.getBusinessShortCode());
+            assertEquals(174379L, rosterRequest.getBusinessShortCode());
+            assertEquals(600000L, rosterRequest.getPartyB());
+            assertEquals(utils.getPassword("174379", "passkey", "20261005094948"), rosterRequest.getPassword());
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

@@ -421,6 +421,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     logger.info("MPESA properties for transaction with id {}: AMS - {}, Shortcode - {}, TILL - {}",
                         transactionId, mpesaProps.getName(), mpesaProps.getBusinessShortCode(), mpesaProps.getTill());
                     exchange.setProperty(PARTY_LOOKUP_FSP_ID, mpesaProps.getTill());
+                    exchange.setProperty(MPESA_API_HOST, mpesaProps.getApiHost());
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
 
@@ -438,7 +439,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return buyGoodsPaymentRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .toD(defaultProps.getApiHost() + buyGoodsLipanaUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&" +
+                .toD("${exchangeProperty."+MPESA_API_HOST+"}" + buyGoodsLipanaUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&" +
                         ConnectionUtils.getConnectionTimeoutDsl(mpesaTimeout))
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA API called, response: \n\n ${body}");
@@ -455,6 +456,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     TransactionStatusRequestDTO transactionStatusRequestDTO = new TransactionStatusRequestDTO();
                     MpesaProps.MPESA mpesaProps = mpesaUtils.getMpesaProperties(
                             exchange.getProperty(AMS, String.class), exchange.getProperty(TRANSACTION_ID, String.class));
+                    exchange.setProperty(MPESA_API_HOST, mpesaProps.getApiHost());
 
                     BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO =
                             (BuyGoodsPaymentRequestDTO) exchange.getProperty(BUY_GOODS_REQUEST_BODY);
@@ -476,7 +478,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return  transactionStatusRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .toD(defaultProps.getApiHost() + transactionStatusUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&"+
+                .toD("${exchangeProperty."+MPESA_API_HOST+"}" + transactionStatusUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&"+
                         ConnectionUtils.getConnectionTimeoutDsl(mpesaTimeout))
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA STATUS called, response: \n\n ${body}");
