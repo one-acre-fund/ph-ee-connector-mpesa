@@ -27,6 +27,7 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -39,6 +40,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class MpesaHttpCallerTest {
 
@@ -289,6 +296,24 @@ class MpesaHttpCallerTest {
         final Exchange exchange = newExchange();
         assertThrows(RuntimeCamelException.class,
                 () -> callWith(MpesaEndpoint.STK_PUSH, "unknown-scheme:nowhere", exchange));
+    }
+
+    @Test
+    void checkedLocalErrorsAreWrappedWithoutRetry() {
+        ProducerTemplate failing = mock(ProducerTemplate.class);
+        when(failing.send(anyString(), any(Exchange.class))).thenAnswer(invocation -> {
+            Exchange sent = invocation.getArgument(1);
+            sent.setException(new TimeoutException("local"));
+            return sent;
+        });
+        MpesaHttpCaller localCaller = TestCallers.caller(failing, properties);
+        final Exchange exchange = newExchange();
+
+        RuntimeCamelException thrown = assertThrows(RuntimeCamelException.class,
+                () -> localCaller.call(MpesaEndpoint.STK_PUSH, url(), exchange));
+
+        assertTrue(thrown.getCause() instanceof TimeoutException);
+        verify(failing, times(1)).send(anyString(), any(Exchange.class));
     }
 
     @Test

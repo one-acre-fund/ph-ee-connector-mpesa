@@ -16,6 +16,7 @@ import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.support.DefaultMessage;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.mifos.connector.mpesa.resilience.MpesaResilienceProperties.EndpointSettings;
@@ -86,7 +87,7 @@ public class MpesaHttpCaller {
         return exchange -> call(endpoint, uri.evaluate(exchange, String.class), exchange);
     }
 
-    void call(MpesaEndpoint endpoint, String uri, Exchange exchange) throws Exception {
+    void call(MpesaEndpoint endpoint, String uri, Exchange exchange) throws IOException {
         String name = "mpesa-" + endpoint.id();
         CircuitBreaker circuitBreaker = circuitBreakers.circuitBreaker(name, circuitBreakerConfigs.get(endpoint));
         Retry retry = retries.retry(name, retryConfigs.get(endpoint));
@@ -106,9 +107,16 @@ public class MpesaHttpCaller {
             if (e.failure != null) {
                 // The request is not left on the message, where it could be mistaken for a response.
                 exchange.setMessage(new DefaultMessage(exchange.getContext()));
-                throw e.failure;
+                throw rethrowable(e.failure);
             }
         }
+    }
+
+    private static IOException rethrowable(Exception failure) {
+        if (failure instanceof IOException io) {
+            return io;
+        }
+        throw failure instanceof RuntimeException runtime ? runtime : new RuntimeCamelException(failure);
     }
 
     private void attempt(String target, Exchange exchange, Message request, EndpointSettings settings) {
