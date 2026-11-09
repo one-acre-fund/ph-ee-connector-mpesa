@@ -11,7 +11,6 @@ import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -22,18 +21,21 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFOR
 @Component
 public class AuthRoutes extends RouteBuilder {
 
-    @Autowired
-    private AccessTokenStore accessTokenStore;
+    private final AccessTokenStore accessTokenStore;
 
-    @Autowired
-    private MpesaUtils mpesautils;
+    private final MpesaUtils mpesautils;
 
-    @Autowired
-    private MpesaHttpCaller mpesaHttpCaller;
+    private final MpesaHttpCaller mpesaHttpCaller;
 
     private MpesaProps.MPESA mpesaProps;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    public AuthRoutes(AccessTokenStore accessTokenStore, MpesaUtils mpesautils, MpesaHttpCaller mpesaHttpCaller) {
+        this.accessTokenStore = accessTokenStore;
+        this.mpesautils = mpesautils;
+        this.mpesaHttpCaller = mpesaHttpCaller;
+    }
 
     @Override
     public void configure() {

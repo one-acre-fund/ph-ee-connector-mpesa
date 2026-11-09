@@ -286,8 +286,9 @@ class MpesaHttpCallerTest {
         assertFalse(retry.getExceptionPredicate().test(attempt));
         assertFalse(circuitBreaker.getRecordExceptionPredicate().test(new IllegalStateException()));
         assertFalse(retry.getExceptionPredicate().test(new IllegalStateException()));
+        final Exchange exchange = newExchange();
         assertThrows(RuntimeCamelException.class,
-                () -> callWith(MpesaEndpoint.STK_PUSH, "unknown-scheme:nowhere", newExchange()));
+                () -> callWith(MpesaEndpoint.STK_PUSH, "unknown-scheme:nowhere", exchange));
     }
 
     @Test
