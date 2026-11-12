@@ -5,8 +5,8 @@ Part of payment hub. It is a microservice for Safaricom mpesa connector.
 [developer.safaricom.co.ke](https://developer.safaricom.co.ke/)
 
 ## Calls to Safaricom: timeouts, retries and circuit breaker
-Every call to Safaricom (token, STK push, STK query) has its own timeouts, retries and circuit breaker
-(`mpesa-token`, `mpesa-stk-push`, `mpesa-stk-query`).
+Every call to Safaricom (token, STK push, STK query) has its own timeouts, retries and circuit breaker, one per endpoint
+and host (`mpesa-token-<host>`, `mpesa-stk-push-<host>`, `mpesa-stk-query-<host>`).
 
 **The STK push is never sent twice.** Safaricom has no idempotency key, so the STK push is retried only when the
 connection failed and the request never left. A timeout or gateway error is not retried: the payment is failed with
@@ -15,6 +15,11 @@ connection failed and the request never left. A timeout or gateway error is not 
 **Status checks are safe to repeat.** The STK query retries gateway errors (502/503/504) and timeouts. If it still has
 no answer, the payment stays pending and is checked again, up to `mpesa.max-retry-count`. A `500` means "still
 processing" and is handled as before.
+
+**Retries stay within the Zeebe job.** An attempt (first call or retry) is only made if it can finish, at its connect
+and read timeouts, `mpesa.resilience.job-deadline-margin` (10s) before the job's deadline. Otherwise the call ends
+with the previous attempt's result, or as not sent (`JOB_DEADLINE`) when no attempt was made. A job therefore never
+times out while a call is running, so Zeebe cannot hand it to another worker that would send a second STK push.
 
 **Circuit breaker.** When `failure-rate-threshold` percent of the last `sliding-window-size` calls fail (connection
 failures, timeouts and `failure-status-codes`; business errors do not count), the circuit opens and calls fail at once
@@ -44,4 +49,5 @@ Override any value with an environment variable, e.g. `MPESA_RESILIENCE_STKQUERY
 - Metrics on `/actuator/prometheus`: `resilience4j_circuitbreaker_state{name,state}`,
   `resilience4j_circuitbreaker_calls_seconds_*{name,kind}`, `resilience4j_retry_calls_total{name,kind}`.
 - Log events: `event=mpesa_circuit_state_changed`, `event=mpesa_call_rejected`, `event=mpesa_call_retry`,
-  `event=mpesa_retry_exhausted`. Reasons name the status code or exception class only, never URLs, headers or bodies.
+  `event=mpesa_retry_exhausted`, `event=mpesa_call_skipped` (no time left before the job deadline). Reasons name the
+  status code or exception class only, never URLs, headers or bodies.

@@ -8,6 +8,7 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.support.DefaultExchange;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
+import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
 import org.slf4j.Logger;
@@ -105,6 +106,7 @@ public class TransactionStateWorker {
                         exchange.setProperty(TIMER, variables.get(TIMER));
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
                         exchange.setProperty(AMS, ams);
+                        exchange.setProperty(MpesaHttpCaller.JOB_DEADLINE, job.getDeadline());
 
                         producerTemplate.send("direct:get-transaction-status-base", exchange);
                     }

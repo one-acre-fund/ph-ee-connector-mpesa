@@ -74,6 +74,7 @@ mpesa:
   # Per-endpoint call protection for Safaricom; see README. Read timeouts default to mpesa.api.timeout
   # (MPESA_API_TIMEOUT). Override any value from the environment, e.g. MPESA_RESILIENCE_STKQUERY_READTIMEOUT=20s.
   resilience:
+    job-deadline-margin: 10s
     token:
       connect-timeout: 5s
       read-timeout: ${mpesa.api.timeout}ms

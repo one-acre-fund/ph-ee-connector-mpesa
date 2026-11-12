@@ -32,17 +32,27 @@ import java.net.NoRouteToHostException;
 import java.net.UnknownHostException;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Sends HTTP calls to Safaricom with a per-endpoint timeout, bounded retries with jittered exponential backoff, and a
- * circuit breaker per endpoint. When Safaricom answers, its response is left on the message as before. When it does
- * not (connection failure, no response, circuit open), the call throws an {@link IOException}, which the routes
- * already handle: the STK push is failed and never sent again, a status check stays pending.
+ * circuit breaker per endpoint and host. When Safaricom answers, its response is left on the message as before. When it
+ * does not (connection failure, no response, circuit open), the call throws an {@link IOException}, which the routes
+ * already handle: the STK push is failed and never sent again, a status check stays pending. When the exchange carries
+ * {@link #JOB_DEADLINE}, an attempt that could not finish before it is not made.
  */
 @Component
 public class MpesaHttpCaller {
 
+    /**
+     * Epoch millis at which the Zeebe job that triggered the call times out.
+     */
+    public static final String JOB_DEADLINE = "mpesaJobDeadline";
+
     private static final Logger logger = LoggerFactory.getLogger(MpesaHttpCaller.class);
+    private static final Pattern HOST = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*://([^/:?]+)");
 
     private final ProducerTemplate producerTemplate;
     private final MpesaResilienceProperties properties;
@@ -88,17 +98,28 @@ public class MpesaHttpCaller {
     }
 
     void call(MpesaEndpoint endpoint, String uri, Exchange exchange) throws IOException {
-        String name = "mpesa-" + endpoint.id();
+        String name = "mpesa-" + endpoint.id() + "-" + hostOf(uri);
         CircuitBreaker circuitBreaker = circuitBreakers.circuitBreaker(name, circuitBreakerConfigs.get(endpoint));
         Retry retry = retries.retry(name, retryConfigs.get(endpoint));
         EndpointSettings settings = properties.settingsFor(endpoint);
         String target = uri + (uri.contains("?") ? "&" : "?") + timeoutParameters(settings);
         Message request = exchange.getMessage().copy();
+        long lastStart = exchange.getProperty(JOB_DEADLINE, Long.MAX_VALUE, Long.class)
+                - properties.getJobDeadlineMargin().toMillis() - longestAttempt(settings);
+        AtomicReference<FailedAttempt> lastFailure = new AtomicReference<>();
 
         try {
-            Retry.decorateRunnable(retry,
-                    CircuitBreaker.decorateRunnable(circuitBreaker, () -> attempt(target, exchange, request, settings)))
-                    .run();
+            Retry.decorateRunnable(retry, CircuitBreaker.decorateRunnable(circuitBreaker, () -> {
+                if (System.currentTimeMillis() > lastStart) {
+                    throw outOfTime(name, lastFailure.get());
+                }
+                try {
+                    attempt(target, exchange, request, settings);
+                } catch (FailedAttempt failed) {
+                    lastFailure.set(failed);
+                    throw failed;
+                }
+            })).run();
         } catch (CallNotPermittedException e) {
             logger.warn("event=mpesa_call_rejected circuit={} state={}", name, circuitBreaker.getState());
             exchange.setMessage(new DefaultMessage(exchange.getContext()));
@@ -137,6 +158,28 @@ public class MpesaHttpCaller {
         if (retryable || failure) {
             throw new FailedAttempt("status:" + status, null, retryable, failure);
         }
+    }
+
+    /**
+     * The failure to report when there is no time left for an attempt: the previous attempt's, whose response (if any)
+     * is still on the message, or a request not sent when no attempt was made. Neither retried nor counted against the
+     * circuit.
+     */
+    private static FailedAttempt outOfTime(String name, FailedAttempt previous) {
+        logger.warn("event=mpesa_call_skipped call={} reason=job_deadline after={}", name, reason(previous));
+        if (previous == null) {
+            return new FailedAttempt("job_deadline", new MpesaJobDeadlineException(name), false, false);
+        }
+        return new FailedAttempt(previous.getMessage(), previous.failure, false, false);
+    }
+
+    static String hostOf(String uri) {
+        Matcher matcher = HOST.matcher(uri);
+        return matcher.find() ? matcher.group(1) : "unknown";
+    }
+
+    private static long longestAttempt(EndpointSettings settings) {
+        return 2 * settings.getConnectTimeout().toMillis() + settings.getReadTimeout().toMillis();
     }
 
     static FailedAttempt classify(Exception exception, EndpointSettings settings) {

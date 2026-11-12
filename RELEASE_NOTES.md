@@ -2,7 +2,7 @@
 
 ## Version 1.4.0
 
-        * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice
+        * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice and retries stay within the Zeebe job deadline
 
 ## Version 1.3.11
 

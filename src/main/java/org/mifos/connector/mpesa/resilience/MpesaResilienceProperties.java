@@ -16,6 +16,10 @@ public class MpesaResilienceProperties {
 
     private static final List<Integer> GATEWAY_ERRORS = List.of(502, 503, 504);
 
+    // Kept free before the Zeebe job deadline to finish the job: an attempt that could end later is not made, so the
+    // job cannot time out and be handed to another worker while a call is still running.
+    private Duration jobDeadlineMargin = Duration.ofSeconds(10);
+
     private EndpointSettings token = new EndpointSettings(List.of(500, 502, 503, 504), true,
             List.of(500, 502, 503, 504));
 
@@ -30,6 +34,14 @@ public class MpesaResilienceProperties {
             return token;
         }
         return endpoint == MpesaEndpoint.STK_PUSH ? stkPush : stkQuery;
+    }
+
+    public Duration getJobDeadlineMargin() {
+        return jobDeadlineMargin;
+    }
+
+    public void setJobDeadlineMargin(Duration jobDeadlineMargin) {
+        this.jobDeadlineMargin = jobDeadlineMargin;
     }
 
     public EndpointSettings getToken() {

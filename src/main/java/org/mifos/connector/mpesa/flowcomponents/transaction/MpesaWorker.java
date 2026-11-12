@@ -8,6 +8,7 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.support.DefaultExchange;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
+import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.utility.ZeebeUtils;
@@ -114,6 +115,7 @@ public class MpesaWorker {
                         exchange.setProperty(CORRELATION_ID, transactionId);
                         exchange.setProperty(DEPLOYED_PROCESS, job.getBpmnProcessId());
                         exchange.setProperty(AMS, ams);
+                        exchange.setProperty(MpesaHttpCaller.JOB_DEADLINE, job.getDeadline());
 
                         variables.put(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO.toString());
 

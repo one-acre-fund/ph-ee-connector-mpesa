@@ -19,6 +19,7 @@ import org.mifos.connector.mpesa.flowcomponents.CorrelationIDStore;
 import org.mifos.connector.mpesa.flowcomponents.mpesa.MpesaGenericProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.CollectionResponseProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.TransactionResponseProcessor;
+import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.resilience.MpesaResilienceProperties;
 import org.mifos.connector.mpesa.resilience.TestCallers;
 import org.mifos.connector.mpesa.utility.MpesaProps;
@@ -187,6 +188,22 @@ class SafaricomResilienceFlowTest {
         assertNull(exchange.getProperty(TRANSACTION_FAILED));
         verifyEventually(3, STK_QUERY);
         verify(collectionResponseProcessor).process(any());
+    }
+
+    @Test
+    void stkPushWithNoTimeLeftBeforeTheJobDeadlineIsFailedWithoutBeingSent() {
+        safaricom.stubFor(post(STK_PUSH).willReturn(aResponse().withStatus(200).withBody(ACCEPTED)));
+        Exchange exchange = new DefaultExchange(context);
+        exchange.setProperty(CORRELATION_ID, "tx-1");
+        exchange.setProperty(AMS, "roster");
+        exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsRequest());
+        exchange.setProperty(MpesaHttpCaller.JOB_DEADLINE, System.currentTimeMillis());
+
+        template.send("direct:buy-goods-base", exchange);
+
+        assertEquals(true, exchange.getProperty(TRANSACTION_FAILED));
+        assertEquals("JOB_DEADLINE", exchange.getProperty(ERROR_CODE));
+        safaricom.verify(0, postRequestedFor(urlEqualTo(STK_PUSH)));
     }
 
     // WireMock logs a delayed request only once its delay has passed, after the client gave up.

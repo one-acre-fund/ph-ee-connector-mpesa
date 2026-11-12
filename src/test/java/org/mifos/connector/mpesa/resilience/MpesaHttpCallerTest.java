@@ -127,7 +127,7 @@ class MpesaHttpCallerTest {
 
         assertThrows(ConnectException.class, () -> callWith(MpesaEndpoint.STK_PUSH,
                 "http://localhost:" + closedPort + PATH + "?throwExceptionOnFailure=false", exchange));
-        assertEquals(1.0, meterRegistry.get("resilience4j.retry.calls").tag("name", "mpesa-stk-push")
+        assertEquals(1.0, meterRegistry.get("resilience4j.retry.calls").tag("name", "mpesa-stk-push-localhost")
                 .tag("kind", "failed_with_retry").functionCounter().count());
     }
 
@@ -164,7 +164,7 @@ class MpesaHttpCallerTest {
         }
 
         safaricom.verify(4, postRequestedFor(urlEqualTo(PATH)));
-        assertEquals(1.0, circuitState("mpesa-stk-query", "closed"));
+        assertEquals(1.0, circuitState("mpesa-stk-query-localhost", "closed"));
     }
 
     @Test
@@ -184,14 +184,14 @@ class MpesaHttpCallerTest {
 
         assertThrows(MpesaCircuitOpenException.class, () -> call(MpesaEndpoint.STK_PUSH));
         safaricom.verify(2, postRequestedFor(urlEqualTo(PATH)));
-        assertEquals(1.0, circuitState("mpesa-stk-push", "open"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "open"));
 
         waitForOpenStateToEnd();
         safaricom.resetAll();
         stub(200);
 
         assertEquals(200, status(call(MpesaEndpoint.STK_PUSH)));
-        assertEquals(1.0, circuitState("mpesa-stk-push", "closed"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "closed"));
     }
 
     @Test
@@ -204,7 +204,7 @@ class MpesaHttpCallerTest {
 
         call(MpesaEndpoint.STK_PUSH);
 
-        assertEquals(1.0, circuitState("mpesa-stk-push", "open"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "open"));
         assertThrows(MpesaCircuitOpenException.class, () -> call(MpesaEndpoint.STK_PUSH));
         safaricom.verify(3, postRequestedFor(urlEqualTo(PATH)));
     }
@@ -222,9 +222,9 @@ class MpesaHttpCallerTest {
 
         call(MpesaEndpoint.STK_PUSH);
 
-        assertEquals(1.0, circuitState("mpesa-stk-push", "half_open"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "half_open"));
         call(MpesaEndpoint.STK_PUSH);
-        assertEquals(1.0, circuitState("mpesa-stk-push", "closed"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "closed"));
     }
 
     @Test
@@ -241,6 +241,58 @@ class MpesaHttpCallerTest {
     }
 
     @Test
+    void eachHostHasItsOwnCircuit() throws Exception {
+        smallWindow();
+        stub(503);
+        call(MpesaEndpoint.STK_PUSH);
+        call(MpesaEndpoint.STK_PUSH);
+        safaricom.resetAll();
+        stub(200);
+
+        assertThrows(MpesaCircuitOpenException.class, () -> call(MpesaEndpoint.STK_PUSH));
+        Exchange otherHost = newExchange();
+        callWith(MpesaEndpoint.STK_PUSH,
+                "http://127.0.0.1:" + safaricom.port() + PATH + "?throwExceptionOnFailure=false", otherHost);
+        assertEquals(200, status(otherHost));
+    }
+
+    @Test
+    void hostIsTakenFromTheUri() {
+        assertEquals("api.safaricom.co.ke", MpesaHttpCaller.hostOf("https://api.safaricom.co.ke:443/mpesa?x=1"));
+        assertEquals("api.safaricom.co.ke", MpesaHttpCaller.hostOf("https://api.safaricom.co.ke"));
+        assertEquals("unknown", MpesaHttpCaller.hostOf("direct:mpesa"));
+    }
+
+    @Test
+    void callThatCouldNotFinishBeforeTheJobDeadlineIsNotSent() {
+        stub(200);
+        properties.setJobDeadlineMargin(Duration.ofMillis(100));
+        caller = newCaller();
+        Exchange exchange = newExchange();
+        exchange.setProperty(MpesaHttpCaller.JOB_DEADLINE, System.currentTimeMillis() + 500);
+
+        assertThrows(MpesaJobDeadlineException.class, () -> callWith(MpesaEndpoint.STK_PUSH, url(), exchange));
+        assertNull(exchange.getMessage().getHeader("Authorization"), "the request must not be left on the message");
+        safaricom.verify(0, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void retryThatCouldOverrunTheJobDeadlineIsNotMade() throws Exception {
+        stub(503);
+        properties.setJobDeadlineMargin(Duration.ofMillis(100));
+        properties.getStkQuery().getRetry().setInitialBackoff(Duration.ofMillis(300));
+        caller = newCaller();
+        Exchange exchange = newExchange();
+        // Room for one attempt (2 x 500ms connect + 300ms read) plus 50ms; the first retry waits at least 150ms.
+        exchange.setProperty(MpesaHttpCaller.JOB_DEADLINE, System.currentTimeMillis() + 100 + 1300 + 50);
+
+        callWith(MpesaEndpoint.STK_QUERY, url(), exchange);
+
+        assertEquals(503, status(exchange));
+        safaricom.verify(1, postRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
     void businessErrorsDoNotOpenTheCircuit() throws Exception {
         smallWindow();
         stub(400);
@@ -248,7 +300,7 @@ class MpesaHttpCallerTest {
             call(MpesaEndpoint.STK_PUSH);
         }
 
-        assertEquals(1.0, circuitState("mpesa-stk-push", "closed"));
+        assertEquals(1.0, circuitState("mpesa-stk-push-localhost", "closed"));
         safaricom.verify(5, postRequestedFor(urlEqualTo(PATH)));
     }
 

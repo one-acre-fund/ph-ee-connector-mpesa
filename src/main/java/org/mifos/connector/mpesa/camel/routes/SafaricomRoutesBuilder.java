@@ -16,6 +16,7 @@ import org.mifos.connector.mpesa.flowcomponents.mpesa.MpesaGenericProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.CollectionResponseProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.TransactionResponseProcessor;
 import org.mifos.connector.mpesa.resilience.MpesaCircuitOpenException;
+import org.mifos.connector.mpesa.resilience.MpesaJobDeadlineException;
 import org.mifos.connector.mpesa.resilience.MpesaEndpoint;
 import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.utility.MpesaProps;
@@ -102,8 +103,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     String message = cause != null ? cause.getMessage() : "I/O error calling Safaricom";
                     logger.error("Safaricom HTTP I/O failure", cause);
 
-                    exchange.setProperty(ERROR_CODE,
-                            cause instanceof MpesaCircuitOpenException ? "CIRCUIT_OPEN" : "CONNECTION_ERROR");
+                    exchange.setProperty(ERROR_CODE, ioErrorCode(cause));
                     exchange.setProperty(ERROR_DESCRIPTION, message);
                     exchange.setProperty(ERROR_INFORMATION, cause != null ? cause.toString() : message);
                     exchange.setProperty(LAST_RESPONSE_BODY, exchange.getProperty(ERROR_INFORMATION));
@@ -493,5 +493,12 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                 .id("stk-query-call")
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA STATUS called, response: \n\n ${body}");
+    }
+
+    private static String ioErrorCode(Exception cause) {
+        if (cause instanceof MpesaCircuitOpenException) {
+            return "CIRCUIT_OPEN";
+        }
+        return cause instanceof MpesaJobDeadlineException ? "JOB_DEADLINE" : "CONNECTION_ERROR";
     }
 }
