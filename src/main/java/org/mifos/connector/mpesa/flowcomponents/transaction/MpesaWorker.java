@@ -1,5 +1,7 @@
 package org.mifos.connector.mpesa.flowcomponents.transaction;
 
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.camunda.zeebe.client.ZeebeClient;
 import org.apache.camel.CamelContext;
@@ -12,6 +14,7 @@ import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.utility.ZeebeUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
+import org.mifos.connector.mpesa.zeebe.ZeebeWorkerDrain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +22,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,6 +53,9 @@ public class MpesaWorker {
     private ZeebeClient zeebeClient;
 
     @Autowired
+    private ZeebeWorkerDrain drain;
+
+    @Autowired
     private ProducerTemplate producerTemplate;
 
     @Autowired
@@ -77,12 +82,15 @@ public class MpesaWorker {
     @Value("${zeebe.client.request-timeout}")
     private Duration requestTimeout;
 
-    @PostConstruct
+    // Workers open only once the application is ready, after Camel and the web server have
+    // started. Opened earlier, a starting pod activates jobs it cannot process yet, and a pod
+    // replaced during startup would hold them until the broker job timeout (FD-1939).
+    @EventListener(ApplicationReadyEvent.class)
     public void setupWorkers() {
 
-        zeebeClient.newWorker()
+        drain.register(zeebeClient.newWorker()
                 .jobType("init-transfer")
-                .handler((client, job) -> {
+                .handler(drain.track((client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {} and workflow instance key {}",
                         job.getType(), job.getBpmnProcessId(), job.getKey(), job.getProcessInstanceKey());
                     long t1 = System.currentTimeMillis();
@@ -118,6 +126,18 @@ public class MpesaWorker {
                         variables.put(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO.toString());
 
                         producerTemplate.send("direct:buy-goods-base", exchange);
+                        if (exchange.getException() != null) {
+                            // The route threw without classifying the outcome, for example a Redis
+                            // timeout after Safaricom accepted the request. The payment may or may not
+                            // have gone out: completing would record a false success and a retry could
+                            // charge twice, so stop here and let an operator resolve the incident.
+                            logger.error("Buy goods route failed for transaction {}, raising an incident",
+                                    transactionId, exchange.getException());
+                            ZeebeCommandHelper.raiseIncident(client, job,
+                                    "buy goods route failed, payment outcome unknown: " + exchange.getException(),
+                                    requestTimeout, logger);
+                            return;
+                        }
                         variables.put(MPESA_API_RESPONSE, exchange.getProperty(MPESA_API_RESPONSE));
                         variables.put(PARTY_LOOKUP_FSP_ID, exchange.getProperty(PARTY_LOOKUP_FSP_ID));
 
@@ -139,14 +159,14 @@ public class MpesaWorker {
                     }
 
                     ZeebeCommandHelper.completeJob(client, job, variables, requestTimeout, logger);
-                })
+                }))
                 .name("init-transfer")
                 .maxJobsActive(workerMaxJobs)
-                .open();
+                .open());
 
-        zeebeClient.newWorker()
+        drain.register(zeebeClient.newWorker()
                 .jobType("delete-workflow-instancekey")
-                .handler(((client, job) -> {
+                .handler(drain.track((client, job) -> {
                     logger.info("Removing Workflow Instance key and Mpesa Txn Id from store");
                     Map<String, Object> variables = job.getVariablesAsMap();
                     String mpesaTxnId = variables.get("mpesaTxnId").toString();
@@ -158,6 +178,6 @@ public class MpesaWorker {
                 }))
                 .name("Cleanup")
                 .maxJobsActive(workerMaxJobs)
-                .open();
+                .open());
     }
 }

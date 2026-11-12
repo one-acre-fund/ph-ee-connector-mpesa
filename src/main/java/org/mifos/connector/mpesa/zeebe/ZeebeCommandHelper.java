@@ -49,9 +49,23 @@ public final class ZeebeCommandHelper {
 
     public static void failJob(JobClient client, ActivatedJob job, String errorMessage,
                                Duration timeout, Logger logger) {
+        fail(client, job, Math.max(job.getRetries() - 1, 0), errorMessage, timeout, logger);
+    }
+
+    /**
+     * Fails the job with no retries left, so the broker raises an incident instead of handing the
+     * job to another worker. For outcomes that are unknown, where a retry could repeat a payment.
+     */
+    public static void raiseIncident(JobClient client, ActivatedJob job, String errorMessage,
+                                     Duration timeout, Logger logger) {
+        fail(client, job, 0, errorMessage, timeout, logger);
+    }
+
+    private static void fail(JobClient client, ActivatedJob job, int retries, String errorMessage,
+                             Duration timeout, Logger logger) {
         try {
             join(client.newFailCommand(job.getKey())
-                    .retries(Math.max(job.getRetries() - 1, 0))
+                    .retries(retries)
                     .errorMessage(errorMessage)
                     .send(), timeout);
         } catch (Exception e) {

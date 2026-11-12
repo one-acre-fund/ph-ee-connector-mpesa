@@ -1,5 +1,7 @@
 package org.mifos.connector.mpesa.flowcomponents.state;
 
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.camunda.zeebe.client.ZeebeClient;
 import org.apache.camel.CamelContext;
@@ -10,12 +12,12 @@ import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeCommandHelper;
+import org.mifos.connector.mpesa.zeebe.ZeebeWorkerDrain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import javax.annotation.PostConstruct;
 import java.time.Duration;
 import java.util.Map;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.*;
@@ -40,6 +42,9 @@ public class TransactionStateWorker {
     private ZeebeClient zeebeClient;
 
     @Autowired
+    private ZeebeWorkerDrain drain;
+
+    @Autowired
     private SafaricomUtils safaricomUtils;
 
     @Value("${zeebe.client.evenly-allocated-max-jobs}")
@@ -51,12 +56,15 @@ public class TransactionStateWorker {
     @Value("${zeebe.client.request-timeout}")
     private Duration requestTimeout;
 
-    @PostConstruct
+    // Workers open only once the application is ready, after Camel and the web server have
+    // started. Opened earlier, a starting pod activates jobs it cannot process yet, and a pod
+    // replaced during startup would hold them until the broker job timeout (FD-1939).
+    @EventListener(ApplicationReadyEvent.class)
     public void setupWorkers() {
 
-        zeebeClient.newWorker()
+        drain.register(zeebeClient.newWorker()
                 .jobType("get-transaction-status")
-                .handler((client, job) -> {
+                .handler(drain.track((client, job) -> {
                     logger.info("Job '{}' started from process '{}' with key {}", job.getType(), job.getBpmnProcessId(), job.getKey());
 
                     Map<String, Object> variables = job.getVariablesAsMap();
@@ -110,10 +118,10 @@ public class TransactionStateWorker {
                     }
 
                     ZeebeCommandHelper.completeJob(client, job, null, requestTimeout, logger);
-                    })
+                    }))
                 .name("get-transaction-status")
                 .maxJobsActive(workerMaxJobs)
-                .open();
+                .open());
 
     }
 

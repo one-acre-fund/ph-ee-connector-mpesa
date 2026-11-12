@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import org.mifos.connector.mpesa.zeebe.ZeebeWorkerDrain;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +64,7 @@ class TransactionStateWorkerTest {
         worker = new TransactionStateWorker();
         ReflectionTestUtils.setField(worker, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(worker, "zeebeClient", zeebe.client);
+        ReflectionTestUtils.setField(worker, "drain", new ZeebeWorkerDrain(Duration.ofSeconds(5), Duration.ofSeconds(5)));
         ReflectionTestUtils.setField(worker, "producerTemplate", producerTemplate);
         ReflectionTestUtils.setField(worker, "camelContext", new DefaultCamelContext());
         ReflectionTestUtils.setField(worker, "safaricomUtils", safaricomUtils);

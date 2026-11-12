@@ -18,6 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import org.mifos.connector.mpesa.zeebe.ZeebeWorkerDrain;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,7 @@ import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.TRANSFER_RESPONSE_C
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,6 +75,7 @@ class MpesaWorkerTest {
         worker = new MpesaWorker();
         ReflectionTestUtils.setField(worker, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(worker, "zeebeClient", zeebe.client);
+        ReflectionTestUtils.setField(worker, "drain", new ZeebeWorkerDrain(Duration.ofSeconds(5), Duration.ofSeconds(5)));
         ReflectionTestUtils.setField(worker, "producerTemplate", producerTemplate);
         ReflectionTestUtils.setField(worker, "camelContext", camelContext);
         ReflectionTestUtils.setField(worker, "safaricomUtils", safaricomUtils);
@@ -156,6 +159,21 @@ class MpesaWorkerTest {
         assertEquals("Unable to lock subscriber", completed.get(ERROR_DESCRIPTION));
         assertEquals("{\"errorCode\":\"500.001.1001\"}", completed.get(ERROR_INFORMATION));
         assertTrue(completed.containsKey(TRANSFER_RESPONSE_CREATE));
+    }
+
+    @Test
+    void initTransfer_routeException_shouldRaiseIncidentInsteadOfCompleting() throws Exception {
+        when(safaricomUtils.channelRequestConvertor(any(), any(), any())).thenReturn(buyGoodsRequest());
+        doAnswer(invocation -> {
+            Exchange exchange = invocation.getArgument(1);
+            exchange.setException(new IllegalStateException("Redis command timed out"));
+            return exchange;
+        }).when(producerTemplate).send(eq("direct:buy-goods-base"), any(Exchange.class));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        verify(jobClient.newFailCommand(1L)).retries(0);
+        verify(jobClient, never()).newCompleteCommand(anyLong());
     }
 
     @Test
