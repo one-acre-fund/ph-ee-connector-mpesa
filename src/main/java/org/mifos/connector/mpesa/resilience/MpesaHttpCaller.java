@@ -71,15 +71,27 @@ public class MpesaHttpCaller {
             retryConfigs.put(endpoint, retryConfig(settings));
         }
         circuitBreakers.getEventPublisher().onEntryAdded(added -> added.getAddedEntry().getEventPublisher()
-                .onStateTransition(event -> logger.warn("event=mpesa_circuit_state_changed circuit={} from={} to={}",
-                        event.getCircuitBreakerName(), event.getStateTransition().getFromState(),
-                        event.getStateTransition().getToState())));
+                .onStateTransition(event -> {
+                    if (logger.isWarnEnabled()) {
+                        logger.warn("event=mpesa_circuit_state_changed circuit={} from={} to={}",
+                                event.getCircuitBreakerName(), event.getStateTransition().getFromState(),
+                                event.getStateTransition().getToState());
+                    }
+                }));
         retries.getEventPublisher().onEntryAdded(added -> added.getAddedEntry().getEventPublisher()
-                .onRetry(event -> logger.warn("event=mpesa_call_retry call={} attempt={} wait_ms={} reason={}",
-                        event.getName(), event.getNumberOfRetryAttempts(), event.getWaitInterval().toMillis(),
-                        reason(event.getLastThrowable())))
-                .onError(event -> logger.error("event=mpesa_retry_exhausted call={} attempts={} reason={}",
-                        event.getName(), event.getNumberOfRetryAttempts(), reason(event.getLastThrowable()))));
+                .onRetry(event -> {
+                    if (logger.isWarnEnabled()) {
+                        logger.warn("event=mpesa_call_retry call={} attempt={} wait_ms={} reason={}",
+                                event.getName(), event.getNumberOfRetryAttempts(),
+                                event.getWaitInterval().toMillis(), reason(event.getLastThrowable()));
+                    }
+                })
+                .onError(event -> {
+                    if (logger.isErrorEnabled()) {
+                        logger.error("event=mpesa_retry_exhausted call={} attempts={} reason={}",
+                                event.getName(), event.getNumberOfRetryAttempts(), reason(event.getLastThrowable()));
+                    }
+                }));
         meterRegistry.ifAvailable(registry -> {
             TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(circuitBreakers).bindTo(registry);
             TaggedRetryMetrics.ofRetryRegistry(retries).bindTo(registry);
@@ -121,7 +133,9 @@ public class MpesaHttpCaller {
                 }
             })).run();
         } catch (CallNotPermittedException e) {
-            logger.warn("event=mpesa_call_rejected circuit={} state={}", name, circuitBreaker.getState());
+            if (logger.isWarnEnabled()) {
+                logger.warn("event=mpesa_call_rejected circuit={} state={}", name, circuitBreaker.getState());
+            }
             exchange.setMessage(new DefaultMessage(exchange.getContext()));
             throw new MpesaCircuitOpenException(name);
         } catch (FailedAttempt e) {
@@ -166,7 +180,9 @@ public class MpesaHttpCaller {
      * circuit.
      */
     private static FailedAttempt outOfTime(String name, FailedAttempt previous) {
-        logger.warn("event=mpesa_call_skipped call={} reason=job_deadline after={}", name, reason(previous));
+        if (logger.isWarnEnabled()) {
+            logger.warn("event=mpesa_call_skipped call={} reason=job_deadline after={}", name, reason(previous));
+        }
         if (previous == null) {
             return new FailedAttempt("job_deadline", new MpesaJobDeadlineException(name), false, false);
         }
