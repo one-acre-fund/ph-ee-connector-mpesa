@@ -31,7 +31,7 @@ through; if they succeed the circuit closes, otherwise it opens again.
 | Setting | token | stk-push | stk-query |
 |---|---|---|---|
 | `connect-timeout` | 5s | 5s | 5s |
-| `read-timeout` | `mpesa.api.timeout` | `mpesa.api.timeout` | `mpesa.api.timeout` |
+| `read-timeout` | 20s | `mpesa.api.timeout` | 20s |
 | `retry.max-attempts` (including the first call) | 3 | 3 | 3 |
 | `retry.initial-backoff` / `backoff-multiplier` / `jitter` | 500ms / 2.0 / 0.5 | 500ms / 2.0 / 0.5 | 500ms / 2.0 / 0.5 |
 | `retry.retry-status-codes` | 500,502,503,504 | none | 502,503,504 |
@@ -42,7 +42,7 @@ through; if they succeed the circuit closes, otherwise it opens again.
 | `circuit-breaker.wait-duration-in-open-state` | 30s | 30s | 30s |
 | `circuit-breaker.permitted-calls-in-half-open-state` | 3 | 3 | 3 |
 
-Override any value with an environment variable, e.g. `MPESA_RESILIENCE_STKQUERY_READTIMEOUT=20s` or
+Override any value with an environment variable, e.g. `MPESA_RESILIENCE_STKQUERY_READTIMEOUT=15s` or
 `MPESA_RESILIENCE_STKPUSH_CIRCUITBREAKER_WAITDURATIONINOPENSTATE=1m`.
 
 **Monitoring.**

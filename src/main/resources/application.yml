@@ -71,13 +71,14 @@ mpesa:
     connections-per-route: 50
     lipana: /mpesa/stkpush/v1/processrequest
     transaction-status: /mpesa/stkpushquery/v2/query
-  # Per-endpoint call protection for Safaricom; see README. Read timeouts default to mpesa.api.timeout
-  # (MPESA_API_TIMEOUT). Override any value from the environment, e.g. MPESA_RESILIENCE_STKQUERY_READTIMEOUT=20s.
+  # Per-endpoint call protection for Safaricom; see README. The STK push read timeout follows mpesa.api.timeout
+  # (MPESA_API_TIMEOUT). Override any value from the environment, e.g. MPESA_RESILIENCE_STKQUERY_READTIMEOUT=15s.
   resilience:
     job-deadline-margin: 10s
     token:
       connect-timeout: 5s
-      read-timeout: ${mpesa.api.timeout}ms
+      # Token and status check together, with all retries, stay well inside the 5-minute job timeout
+      read-timeout: 20s
       retry:
         max-attempts: 3
         initial-backoff: 500ms
@@ -113,7 +114,7 @@ mpesa:
     # A 500 from the STK query means "still processing": neither retried nor a failure
     stk-query:
       connect-timeout: 5s
-      read-timeout: ${mpesa.api.timeout}ms
+      read-timeout: 20s
       retry:
         max-attempts: 3
         initial-backoff: 500ms

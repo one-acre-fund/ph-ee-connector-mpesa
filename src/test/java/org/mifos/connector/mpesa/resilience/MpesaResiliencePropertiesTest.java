@@ -24,6 +24,8 @@ class MpesaResiliencePropertiesTest {
         MpesaResilienceProperties properties = bind(Map.of());
 
         assertEquals(Duration.ofSeconds(60), properties.getStkPush().getReadTimeout());
+        assertEquals(Duration.ofSeconds(20), properties.getToken().getReadTimeout());
+        assertEquals(Duration.ofSeconds(20), properties.getStkQuery().getReadTimeout());
         assertEquals(List.of(), properties.getStkPush().getRetry().getRetryStatusCodes());
         assertFalse(properties.getStkPush().getRetry().isRetryWhenOutcomeUnknown());
         assertEquals(List.of(502, 503, 504), properties.getStkPush().getCircuitBreaker().getFailureStatusCodes());
@@ -34,13 +36,13 @@ class MpesaResiliencePropertiesTest {
     }
 
     @Test
-    void readTimeoutsFollowTheExistingApiTimeoutAndCanBeOverriddenPerEndpoint() throws IOException {
+    void stkPushReadTimeoutFollowsTheExistingApiTimeoutAndEachCanBeOverridden() throws IOException {
         MpesaResilienceProperties properties = bind(Map.of("MPESA_API_TIMEOUT", "6000",
-                "MPESA_RESILIENCE_STKQUERY_READTIMEOUT", "20s"));
+                "MPESA_RESILIENCE_STKQUERY_READTIMEOUT", "15s"));
 
         assertEquals(Duration.ofSeconds(6), properties.getStkPush().getReadTimeout());
-        assertEquals(Duration.ofSeconds(6), properties.getToken().getReadTimeout());
-        assertEquals(Duration.ofSeconds(20), properties.getStkQuery().getReadTimeout());
+        assertEquals(Duration.ofSeconds(20), properties.getToken().getReadTimeout());
+        assertEquals(Duration.ofSeconds(15), properties.getStkQuery().getReadTimeout());
     }
 
     @Test
