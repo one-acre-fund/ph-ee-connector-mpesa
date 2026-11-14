@@ -21,6 +21,7 @@ import org.mifos.connector.mpesa.flowcomponents.CorrelationIDStore;
 import org.mifos.connector.mpesa.flowcomponents.mpesa.MpesaGenericProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.CollectionResponseProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.TransactionResponseProcessor;
+import org.mifos.connector.mpesa.resilience.TestCallers;
 import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
@@ -99,11 +100,10 @@ class SafaricomRoutesFlowTest {
 
         SafaricomRoutesBuilder builder = new SafaricomRoutesBuilder(new ObjectMapper(), collectionResponseProcessor,
                 transactionResponseProcessor, new MpesaGenericProcessor(), accessTokenStore, correlationIDStore,
-                safaricomUtils, mpesaUtils);
+                safaricomUtils, mpesaUtils, TestCallers.caller(mock(ProducerTemplate.class)));
         ReflectionTestUtils.setField(builder, "buyGoodsLipanaUrl", "/stkpush");
         ReflectionTestUtils.setField(builder, "transactionStatusUrl", "/stkpushquery");
         ReflectionTestUtils.setField(builder, "maxRetryCount", 3);
-        ReflectionTestUtils.setField(builder, "mpesaTimeout", 1000);
 
         context = new DefaultCamelContext();
         context.addRoutes(builder);
@@ -121,8 +121,8 @@ class SafaricomRoutesFlowTest {
         AdviceWith.adviceWith(context, "buy-goods-online", a -> a.replaceFromWith("direct:rest-buygoods"));
         AdviceWith.adviceWith(context, "buy-goods-transaction-status",
                 a -> a.replaceFromWith("direct:rest-transactionstatus"));
-        adviceRouteFrom("lipana-buy-goods");
-        adviceRouteFrom("lipana-transaction-status");
+        adviceRouteFrom("lipana-buy-goods", "stk-push-call");
+        adviceRouteFrom("lipana-transaction-status", "stk-query-call");
 
         context.start();
         template = context.createProducerTemplate();
@@ -552,13 +552,13 @@ class SafaricomRoutesFlowTest {
         });
     }
 
-    private void adviceRouteFrom(String directName) throws Exception {
+    private void adviceRouteFrom(String directName, String callId) throws Exception {
         for (RouteDefinition route : context.adapt(ModelCamelContext.class).getRouteDefinitions()) {
             if (route.getInput().getEndpointUri().matches("direct:(//)?" + directName)) {
                 AdviceWith.adviceWith(route, context, new org.apache.camel.builder.AdviceWithRouteBuilder() {
                     @Override
                     public void configure() {
-                        weaveByToString("DynamicTo.*").replace().to("mock:mpesa");
+                        weaveById(callId).replace().to("mock:mpesa");
                     }
                 });
                 return;

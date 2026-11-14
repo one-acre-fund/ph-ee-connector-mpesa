@@ -71,6 +71,64 @@ mpesa:
     connections-per-route: 50
     lipana: /mpesa/stkpush/v1/processrequest
     transaction-status: /mpesa/stkpushquery/v2/query
+  # Per-endpoint call protection for Safaricom; see README. The STK push read timeout follows mpesa.api.timeout
+  # (MPESA_API_TIMEOUT). Override any value from the environment, e.g. MPESA_RESILIENCE_STKQUERY_READTIMEOUT=15s.
+  resilience:
+    job-deadline-margin: 10s
+    token:
+      connect-timeout: 5s
+      # Token and status check together, with all retries, stay well inside the 5-minute job timeout
+      read-timeout: 20s
+      retry:
+        max-attempts: 3
+        initial-backoff: 500ms
+        backoff-multiplier: 2.0
+        jitter: 0.5
+        retry-status-codes: 500,502,503,504
+        retry-when-outcome-unknown: true
+      circuit-breaker:
+        failure-status-codes: 500,502,503,504
+        failure-rate-threshold: 50
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
+    # No idempotency key on the STK push: only a request that never reached Safaricom is retried
+    stk-push:
+      connect-timeout: 5s
+      read-timeout: ${mpesa.api.timeout}ms
+      retry:
+        max-attempts: 3
+        initial-backoff: 500ms
+        backoff-multiplier: 2.0
+        jitter: 0.5
+        retry-status-codes:
+        retry-when-outcome-unknown: false
+      circuit-breaker:
+        failure-status-codes: 502,503,504
+        failure-rate-threshold: 50
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
+    # A 500 from the STK query means "still processing": neither retried nor a failure
+    stk-query:
+      connect-timeout: 5s
+      read-timeout: 20s
+      retry:
+        max-attempts: 3
+        initial-backoff: 500ms
+        backoff-multiplier: 2.0
+        jitter: 0.5
+        retry-status-codes: 502,503,504
+        retry-when-outcome-unknown: true
+      circuit-breaker:
+        failure-status-codes: 502,503,504
+        failure-rate-threshold: 50
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
   local:
     host: http://localhost:5000
     transaction-callback: /buygoods/callback

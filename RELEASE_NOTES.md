@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.4.0
+
+        * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice and retries stay within the Zeebe job deadline
+
 ## Version 1.3.11
 
         * [FD-1984] - Keep M-Pesa account settings per transaction so concurrent payments for different accounts don't use each other's shortcode, till or pass key

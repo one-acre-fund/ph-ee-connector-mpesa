@@ -15,7 +15,10 @@ import org.mifos.connector.mpesa.flowcomponents.CorrelationIDStore;
 import org.mifos.connector.mpesa.flowcomponents.mpesa.MpesaGenericProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.CollectionResponseProcessor;
 import org.mifos.connector.mpesa.flowcomponents.transaction.TransactionResponseProcessor;
-import org.mifos.connector.mpesa.utility.ConnectionUtils;
+import org.mifos.connector.mpesa.resilience.MpesaCircuitOpenException;
+import org.mifos.connector.mpesa.resilience.MpesaJobDeadlineException;
+import org.mifos.connector.mpesa.resilience.MpesaEndpoint;
+import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
 import org.mifos.connector.mpesa.utility.MpesaProps;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
@@ -47,9 +50,6 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
     @Value("${mpesa.max-retry-count}")
     private Integer maxRetryCount;
 
-    @Value("${mpesa.api.timeout}")
-    private Integer mpesaTimeout;
-
     private final ObjectMapper objectMapper;
 
     private final CollectionResponseProcessor collectionResponseProcessor;
@@ -66,13 +66,15 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
 
     private final MpesaUtils mpesaUtils;
 
+    private final MpesaHttpCaller mpesaHttpCaller;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     public SafaricomRoutesBuilder(ObjectMapper objectMapper, CollectionResponseProcessor collectionResponseProcessor,
                                   TransactionResponseProcessor transactionResponseProcessor,
                                   MpesaGenericProcessor mpesaGenericProcessor,
                                   AccessTokenStore accessTokenStore, CorrelationIDStore correlationIDStore, SafaricomUtils safaricomUtils,
-                                  MpesaUtils mpesaUtils) {
+                                  MpesaUtils mpesaUtils, MpesaHttpCaller mpesaHttpCaller) {
         this.objectMapper = objectMapper;
         this.collectionResponseProcessor = collectionResponseProcessor;
         this.transactionResponseProcessor = transactionResponseProcessor;
@@ -81,6 +83,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
         this.correlationIDStore = correlationIDStore;
         this.safaricomUtils = safaricomUtils;
         this.mpesaUtils = mpesaUtils;
+        this.mpesaHttpCaller = mpesaHttpCaller;
     }
 
     @Override
@@ -100,7 +103,7 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     String message = cause != null ? cause.getMessage() : "I/O error calling Safaricom";
                     logger.error("Safaricom HTTP I/O failure", cause);
 
-                    exchange.setProperty(ERROR_CODE, "CONNECTION_ERROR");
+                    exchange.setProperty(ERROR_CODE, ioErrorCode(cause));
                     exchange.setProperty(ERROR_DESCRIPTION, message);
                     exchange.setProperty(ERROR_INFORMATION, cause != null ? cause.toString() : message);
                     exchange.setProperty(LAST_RESPONSE_BODY, exchange.getProperty(ERROR_INFORMATION));
@@ -350,6 +353,12 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                         exchange.setProperty(TRANSACTION_ID, correlationId);
                         exchange.setProperty(IS_TRANSACTION_PENDING, true);
                     })
+                .when(header(Exchange.HTTP_RESPONSE_CODE).in("502", "503", "504"))
+                    .log(LoggingLevel.WARN, "Transaction status unknown (gateway error ${header.CamelHttpResponseCode}); checking again later")
+                    .process(exchange -> {
+                        exchange.setProperty(TRANSACTION_ID, exchange.getProperty(CORRELATION_ID));
+                        exchange.setProperty(IS_TRANSACTION_PENDING, true);
+                    })
                 .otherwise()
                     .log(LoggingLevel.ERROR, "Transaction status request unsuccessful")
                     .process(exchange -> {
@@ -439,8 +448,9 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return buyGoodsPaymentRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .toD("${exchangeProperty."+MPESA_API_HOST+"}" + buyGoodsLipanaUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&" +
-                        ConnectionUtils.getConnectionTimeoutDsl(mpesaTimeout))
+                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_PUSH, simple(
+                        "${exchangeProperty." + MPESA_API_HOST + "}" + buyGoodsLipanaUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
+                .id("stk-push-call")
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA API called, response: \n\n ${body}");
 
@@ -478,9 +488,17 @@ public class SafaricomRoutesBuilder extends RouteBuilder {
                     return  transactionStatusRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
-                .toD("${exchangeProperty."+MPESA_API_HOST+"}" + transactionStatusUrl +"?bridgeEndpoint=true&throwExceptionOnFailure=false&"+
-                        ConnectionUtils.getConnectionTimeoutDsl(mpesaTimeout))
+                .process(mpesaHttpCaller.call(MpesaEndpoint.STK_QUERY, simple(
+                        "${exchangeProperty." + MPESA_API_HOST + "}" + transactionStatusUrl + "?bridgeEndpoint=true&throwExceptionOnFailure=false")))
+                .id("stk-query-call")
                 .process(mpesaGenericProcessor)
                 .log(LoggingLevel.INFO, "MPESA STATUS called, response: \n\n ${body}");
+    }
+
+    private static String ioErrorCode(Exception cause) {
+        if (cause instanceof MpesaCircuitOpenException) {
+            return "CIRCUIT_OPEN";
+        }
+        return cause instanceof MpesaJobDeadlineException ? "JOB_DEADLINE" : "CONNECTION_ERROR";
     }
 }
