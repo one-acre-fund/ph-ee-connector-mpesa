@@ -8,9 +8,11 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.support.DefaultExchange;
+import org.json.JSONObject;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.resilience.MpesaHttpCaller;
+import org.mifos.connector.mpesa.utility.ChannelRequestValidationException;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.utility.ZeebeUtils;
@@ -115,8 +117,19 @@ public class MpesaWorker {
                         TransactionChannelC2BRequestDTO channelRequest = objectMapper.readValue(
                                 (String) variables.get("mpesaChannelRequest"), TransactionChannelC2BRequestDTO.class);
                         String ams = (String) variables.get(AMS);
-                        BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO = safaricomUtils.channelRequestConvertor(
-                                channelRequest, transactionId, ams);
+                        BuyGoodsPaymentRequestDTO buyGoodsPaymentRequestDTO;
+                        try {
+                            buyGoodsPaymentRequestDTO = safaricomUtils.channelRequestConvertor(
+                                    channelRequest, transactionId, ams);
+                        } catch (ChannelRequestValidationException e) {
+                            // Retrying can never fix bad input, so fail the transfer through the BPMN failure path
+                            // instead of exhausting retries and raising an incident.
+                            logger.warn("Rejecting transaction {} before calling M-Pesa: {} - {}", transactionId,
+                                    e.getErrorCode(), e.getMessage());
+                            variables.putAll(validationFailureVariables(e));
+                            ZeebeCommandHelper.completeJob(client, job, variables, requestTimeout, logger);
+                            return;
+                        }
                         logger.info(buyGoodsPaymentRequestDTO.toString());
                         Exchange exchange = new DefaultExchange(camelContext);
                         exchange.setProperty(BUY_GOODS_REQUEST_BODY, buyGoodsPaymentRequestDTO);
@@ -181,5 +194,22 @@ public class MpesaWorker {
                 .name("Cleanup")
                 .maxJobsActive(workerMaxJobs)
                 .open());
+    }
+
+    /**
+     * Variables that send the process down the existing "transactionFailed = true" branch with a business reason.
+     */
+    private static Map<String, Object> validationFailureVariables(ChannelRequestValidationException e) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put(TRANSACTION_FAILED, true);
+        variables.put(TRANSFER_CREATE_FAILED, true);
+        variables.put(TRANSFER_RESPONSE_CREATE, ZeebeUtils.getTransferResponseCreateJson());
+        variables.put(ERROR_CODE, e.getErrorCode());
+        variables.put(ERROR_DESCRIPTION, e.getMessage());
+        JSONObject errorInformation = new JSONObject();
+        errorInformation.put("errorCode", e.getErrorCode());
+        errorInformation.put("errorMessage", e.getMessage());
+        variables.put(ERROR_INFORMATION, errorInformation.toString());
+        return variables;
     }
 }
