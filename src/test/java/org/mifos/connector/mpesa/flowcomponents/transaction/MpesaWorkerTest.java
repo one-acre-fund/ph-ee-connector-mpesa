@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.flowcomponents.PaybillStateStore;
+import org.mifos.connector.mpesa.utility.ChannelRequestValidationException;
 import org.mifos.connector.mpesa.utility.MpesaUtils;
 import org.mifos.connector.mpesa.utility.SafaricomUtils;
 import org.mifos.connector.mpesa.zeebe.ZeebeMocks;
@@ -33,6 +34,8 @@ import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_CODE;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_DESCRIPTION;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.ERROR_INFORMATION;
 import static org.mifos.connector.mpesa.camel.config.CamelProperties.MPESA_API_RESPONSE;
+import static org.mifos.connector.mpesa.utility.ChannelRequestValidationException.INVALID_AMOUNT;
+import static org.mifos.connector.mpesa.utility.ChannelRequestValidationException.INVALID_MSISDN;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.AMS;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.PARTY_LOOKUP_FSP_ID;
 import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.SERVER_TRANSACTION_ID;
@@ -174,6 +177,38 @@ class MpesaWorkerTest {
 
         verify(jobClient.newFailCommand(1L)).retries(0);
         verify(jobClient, never()).newCompleteCommand(anyLong());
+    }
+
+    @Test
+    void initTransfer_invalidAmount_shouldCompleteAsFailedWithoutCallingMpesa() throws Exception {
+        when(safaricomUtils.channelRequestConvertor(any(), any(), any())).thenThrow(
+                new ChannelRequestValidationException(INVALID_AMOUNT, "Amount '1315.5' must be a whole number"));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        verify(jobClient, never()).newFailCommand(anyLong());
+        Map<String, Object> completed = completedVariables();
+        assertEquals(true, completed.get(TRANSACTION_FAILED));
+        assertEquals(true, completed.get(TRANSFER_CREATE_FAILED));
+        assertEquals(INVALID_AMOUNT, completed.get(ERROR_CODE));
+        assertEquals("Amount '1315.5' must be a whole number", completed.get(ERROR_DESCRIPTION));
+        assertTrue(((String) completed.get(ERROR_INFORMATION)).contains(INVALID_AMOUNT));
+        assertTrue(completed.containsKey(TRANSFER_RESPONSE_CREATE));
+    }
+
+    @Test
+    void initTransfer_invalidMsisdn_shouldCompleteAsFailedWithoutCallingMpesa() throws Exception {
+        when(safaricomUtils.channelRequestConvertor(any(), any(), any())).thenThrow(
+                new ChannelRequestValidationException(INVALID_MSISDN, "Payer MSISDN '+null' is missing or invalid"));
+
+        initTransferHandler().handle(jobClient, ZeebeMocks.job(variables()));
+
+        verify(producerTemplate, never()).send(any(String.class), any(Exchange.class));
+        verify(jobClient, never()).newFailCommand(anyLong());
+        Map<String, Object> completed = completedVariables();
+        assertEquals(true, completed.get(TRANSACTION_FAILED));
+        assertEquals(INVALID_MSISDN, completed.get(ERROR_CODE));
     }
 
     @Test

@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.4.1
+
+        * [FD-1975] - Add validation for channel requests to ensure that the amount is a whole number and that the MSISDN is present. If not, fail the transfer with a business reason instead of retrying and raising an incident.
+
 ## Version 1.4.0
 
         * [FD-1935] - Add timeouts, safe retries and a circuit breaker to Safaricom calls; the STK push is never sent twice and retries stay within the Zeebe job deadline

@@ -4,7 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.camel.util.json.JsonObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mifos.connector.common.channel.dto.TransactionChannelC2BRequestDTO;
+import org.mifos.connector.common.gsma.dto.GsmaParty;
+import org.mifos.connector.common.mojaloop.dto.MoneyData;
 import org.mifos.connector.mpesa.dto.BuyGoodsPaymentRequestDTO;
 import org.mifos.connector.mpesa.dto.StkCallback;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -20,8 +25,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mifos.connector.mpesa.safaricom.config.SafaricomProperties.MPESA_BUY_GOODS_TRANSACTION_TYPE;
+import static org.mifos.connector.mpesa.utility.ChannelRequestValidationException.INVALID_AMOUNT;
+import static org.mifos.connector.mpesa.utility.ChannelRequestValidationException.INVALID_MSISDN;
+import static org.mifos.connector.mpesa.utility.ChannelRequestValidationException.INVALID_PAYER;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -156,6 +165,107 @@ class SafaricomUtilsTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1315.5", "9.5", "0.01", "100.001"})
+    void channelRequestConvertor_withDecimalAmount_shouldRejectWithInvalidAmount(String amount) {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        assertRejected(INVALID_AMOUNT, request(amount, party("MSISDN", "254708374149"), party("ACCOUNTID", "12345")));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "abc", "0", "-5", "0.00"})
+    void channelRequestConvertor_withMissingOrNonPositiveAmount_shouldRejectWithInvalidAmount(String amount) {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        assertRejected(INVALID_AMOUNT, request(amount, party("MSISDN", "254708374149"), party("ACCOUNTID", "12345")));
+    }
+
+    @Test
+    void channelRequestConvertor_withoutAmount_shouldRejectWithInvalidAmount() {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        TransactionChannelC2BRequestDTO request = request("10", party("MSISDN", "254708374149"));
+        request.setAmount(null);
+        assertRejected(INVALID_AMOUNT, request);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1315", "1315.00", " 1315 ", "1315.0"})
+    void channelRequestConvertor_withWholeAmount_shouldConvert(String amount) {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        BuyGoodsPaymentRequestDTO dto = safaricomUtils.channelRequestConvertor(
+                request(amount, party("MSISDN", "254708374149"), party("ACCOUNTID", "12345")), "tx-1", "roster");
+        assertEquals(1315L, dto.getAmount());
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "+null", "null", "+", "2547abc", "+254 708 374 149", "1234567890123456"})
+    void channelRequestConvertor_withMissingOrInvalidMsisdn_shouldRejectWithInvalidMsisdn(String msisdn) {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        assertRejected(INVALID_MSISDN, request("10", party("MSISDN", msisdn), party("ACCOUNTID", "12345")));
+    }
+
+    @Test
+    void channelRequestConvertor_withoutMsisdnParty_shouldRejectWithInvalidMsisdn() {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        assertRejected(INVALID_MSISDN, request("10", party("ACCOUNTID", "12345")));
+    }
+
+    @Test
+    void channelRequestConvertor_withoutPayer_shouldRejectWithInvalidPayer() {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        assertRejected(INVALID_PAYER, request("10"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"+254708374149", "254708374149", " 254708374149 "})
+    void channelRequestConvertor_withOrWithoutPlus_shouldConvertMsisdn(String msisdn) {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        BuyGoodsPaymentRequestDTO dto = safaricomUtils.channelRequestConvertor(
+                request("10", party("MSISDN", msisdn), party("ACCOUNTID", "12345")), "tx-1", "roster");
+        assertEquals(254708374149L, dto.getPartyA());
+        assertEquals(254708374149L, dto.getPhoneNumber());
+    }
+
+    @Test
+    void channelRequestConvertor_withNonKenyanMsisdn_shouldConvert() {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        BuyGoodsPaymentRequestDTO dto = safaricomUtils.channelRequestConvertor(
+                request("10", party("MSISDN", "+256712345678"), party("ACCOUNTID", "12345")), "tx-1", "roster");
+        assertEquals(256712345678L, dto.getPartyA());
+    }
+
+    @Test
+    void channelRequestConvertor_withOnlyMsisdnParty_shouldConvert() {
+        when(mpesaUtils.getMpesaProperties("roster", "tx-1")).thenReturn(props());
+        BuyGoodsPaymentRequestDTO dto = safaricomUtils.channelRequestConvertor(
+                request("10", party("MSISDN", "254708374149")), "tx-1", "roster");
+        assertEquals(254708374149L, dto.getPartyA());
+    }
+
+    private void assertRejected(String expectedCode, TransactionChannelC2BRequestDTO request) {
+        ChannelRequestValidationException e = assertThrows(ChannelRequestValidationException.class,
+                () -> safaricomUtils.channelRequestConvertor(request, "tx-1", "roster"));
+        assertEquals(expectedCode, e.getErrorCode());
+    }
+
+    private static TransactionChannelC2BRequestDTO request(String amount, GsmaParty... payer) {
+        TransactionChannelC2BRequestDTO request = new TransactionChannelC2BRequestDTO();
+        MoneyData money = new MoneyData();
+        money.setAmount(amount);
+        money.setCurrency("KES");
+        request.setAmount(money);
+        request.setPayer(payer);
+        return request;
+    }
+
+    private static GsmaParty party(String key, String value) {
+        GsmaParty party = new GsmaParty();
+        party.setKey(key);
+        party.setValue(value);
+        return party;
     }
 
     private static MpesaProps.MPESA props() {
