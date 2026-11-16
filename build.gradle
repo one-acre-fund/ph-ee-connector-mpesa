@@ -57,7 +57,7 @@ dependencies {
 
 
 group = 'org.mifos'
-version = '1.4.1'
+version = '1.4.2'
 
 java {
     toolchain {
@@ -84,8 +84,27 @@ tasks.register('printVersion') {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'sandbox'
+    }
     finalizedBy jacocoTestReport
+}
+
+// Calls the Safaricom Daraja sandbox for real; needs the MPESA_SANDBOX_* variables (see PayoutSandboxIT)
+tasks.register('sandboxTest', Test) {
+    description = 'Runs the payout tests against the Safaricom Daraja sandbox'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'sandbox'
+    }
+    outputs.upToDateWhen { false }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+        exceptionFormat = 'full'
+    }
 }
 
 tasks.named('jacocoTestReport') {

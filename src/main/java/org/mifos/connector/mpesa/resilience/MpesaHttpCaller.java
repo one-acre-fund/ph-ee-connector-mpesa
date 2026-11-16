@@ -211,7 +211,10 @@ public class MpesaHttpCaller {
         return new FailedAttempt("local_error:" + reason, exception, false, false);
     }
 
-    private static boolean neverSent(Throwable exception) {
+    /**
+     * Whether the failure happened before the request left, so the provider cannot have acted on it.
+     */
+    public static boolean neverSent(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
             if (cause instanceof ConnectException || cause instanceof ConnectTimeoutException
                     || cause instanceof UnknownHostException || cause instanceof NoRouteToHostException

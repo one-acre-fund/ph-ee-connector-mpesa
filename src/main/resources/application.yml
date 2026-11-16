@@ -16,6 +16,8 @@ mpesa-connector:
       paybill-workflow-seconds: ${REDIS_TTL_PAYBILL_WORKFLOW_SECONDS:172800}
       error-code-fresh-seconds: ${REDIS_TTL_ERROR_CODE_FRESH_SECONDS:3600}
       error-code-retention-seconds: ${REDIS_TTL_ERROR_CODE_RETENTION_SECONDS:2592000}
+      # What was sent for each payout, to check Safaricom's result against it
+      payout-seconds: ${REDIS_TTL_PAYOUT_SECONDS:604800}
 
 camel:
   server-port: 5000
@@ -71,6 +73,15 @@ mpesa:
     connections-per-route: 50
     lipana: /mpesa/stkpush/v1/processrequest
     transaction-status: /mpesa/stkpushquery/v2/query
+    b2c: /mpesa/b2c/v3/paymentrequest
+    b2c-status: /mpesa/transactionstatus/v1/query
+  payout:
+    # How long a payout result waits in Zeebe for the process to reach the payout-result catch event
+    message-ttl: ${MPESA_PAYOUT_MESSAGE_TTL:PT1H}
+    status:
+      # Status checks before an unknown payout is handed to an operator; the wait doubles up to max-timer
+      max-checks: ${MPESA_PAYOUT_STATUS_MAX_CHECKS:8}
+      max-timer: ${MPESA_PAYOUT_STATUS_MAX_TIMER:PT30M}
   # Per-endpoint call protection for Safaricom; see README. The STK push read timeout follows mpesa.api.timeout
   # (MPESA_API_TIMEOUT). Override any value from the environment, e.g. MPESA_RESILIENCE_STKQUERY_READTIMEOUT=15s.
   resilience:
@@ -129,11 +140,52 @@ mpesa:
         minimum-number-of-calls: 10
         wait-duration-in-open-state: 30s
         permitted-calls-in-half-open-state: 3
+    # Money out: only a request that never left is retried. An unknown outcome is resolved by a status query.
+    b2c:
+      connect-timeout: 5s
+      read-timeout: 30s
+      retry:
+        max-attempts: 3
+        initial-backoff: 500ms
+        backoff-multiplier: 2.0
+        jitter: 0.5
+        retry-status-codes:
+        retry-when-outcome-unknown: false
+      circuit-breaker:
+        failure-status-codes: 502,503,504
+        failure-rate-threshold: 50
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
+    # A read: safe to retry
+    b2c-status:
+      connect-timeout: 5s
+      read-timeout: 20s
+      retry:
+        max-attempts: 3
+        initial-backoff: 500ms
+        backoff-multiplier: 2.0
+        jitter: 0.5
+        retry-status-codes: 502,503,504
+        retry-when-outcome-unknown: true
+      circuit-breaker:
+        failure-status-codes: 502,503,504
+        failure-rate-threshold: 50
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
   local:
     host: http://localhost:5000
     transaction-callback: /buygoods/callback
     queue-timeout-url: /queuetimeout/callback
     result-url: /result/callback
+    # Where Safaricom posts payout results. Set hard-to-guess paths per environment and allow only Safaricom's IPs.
+    payout-result: ${MPESA_PAYOUT_RESULT_PATH:/payout/result}
+    payout-timeout: ${MPESA_PAYOUT_TIMEOUT_PATH:/payout/timeout}
+    payout-status-result: ${MPESA_PAYOUT_STATUS_RESULT_PATH:/payout/status/result}
+    payout-status-timeout: ${MPESA_PAYOUT_STATUS_TIMEOUT_PATH:/payout/status/timeout}
 
 accounts:
   group:
@@ -177,6 +229,17 @@ accounts:
       client-secret: ${ACCOUNTS_FINERACT_CLIENTSECRET:YzuGNoJxeub8ZC6d}
       api-host: ${ACCOUNTS_FINERACT_APIHOST:https://sandbox.safaricom.co.ke}
       pass-key: ${ACCOUNTS_FINERACT_PASSKEY:bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919}
+      # B2C payouts; client key and secret default to the account's own when empty
+      b2c:
+        enabled: ${ACCOUNTS_FINERACT_B2C_ENABLED:false}
+        short-code: ${ACCOUNTS_FINERACT_B2C_SHORTCODE:600000}
+        initiator-name: ${ACCOUNTS_FINERACT_B2C_INITIATOR:}
+        security-credential: ${ACCOUNTS_FINERACT_B2C_SECURITY_CREDENTIAL:}
+        client-key: ${ACCOUNTS_FINERACT_B2C_CLIENTKEY:}
+        client-secret: ${ACCOUNTS_FINERACT_B2C_CLIENTSECRET:}
+        command-id: ${ACCOUNTS_FINERACT_B2C_COMMAND_ID:BusinessPayment}
+        min-amount: ${ACCOUNTS_FINERACT_B2C_MIN_AMOUNT:10}
+        max-amount: ${ACCOUNTS_FINERACT_B2C_MAX_AMOUNT:250000}
     - name: "odoo"
       business-short-code: ${ACCOUNTS_ODOO_SHORTCODE:122344567}
       till: ${ACCOUNTS_ODOO_TILL:1234567}

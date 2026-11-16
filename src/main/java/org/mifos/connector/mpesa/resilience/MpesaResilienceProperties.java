@@ -29,11 +29,21 @@ public class MpesaResilienceProperties {
     // A 500 from the STK query means "still processing", so it is neither retried nor a failure.
     private EndpointSettings stkQuery = new EndpointSettings(GATEWAY_ERRORS, true, GATEWAY_ERRORS);
 
+    // B2C payouts are deduplicated by OriginatorConversationID, but an unknown outcome is still resolved by a status
+    // query rather than a resend: only a request that never left is retried.
+    private EndpointSettings b2c = new EndpointSettings(List.of(), false, GATEWAY_ERRORS);
+
+    // The B2C status query is a read, so it is safe to retry.
+    private EndpointSettings b2cStatus = new EndpointSettings(GATEWAY_ERRORS, true, GATEWAY_ERRORS);
+
     public EndpointSettings settingsFor(MpesaEndpoint endpoint) {
-        if (endpoint == MpesaEndpoint.TOKEN) {
-            return token;
-        }
-        return endpoint == MpesaEndpoint.STK_PUSH ? stkPush : stkQuery;
+        return switch (endpoint) {
+            case TOKEN -> token;
+            case STK_PUSH -> stkPush;
+            case STK_QUERY -> stkQuery;
+            case B2C -> b2c;
+            case B2C_STATUS -> b2cStatus;
+        };
     }
 
     public Duration getJobDeadlineMargin() {
@@ -66,6 +76,22 @@ public class MpesaResilienceProperties {
 
     public void setStkQuery(EndpointSettings stkQuery) {
         this.stkQuery = stkQuery;
+    }
+
+    public EndpointSettings getB2c() {
+        return b2c;
+    }
+
+    public void setB2c(EndpointSettings b2c) {
+        this.b2c = b2c;
+    }
+
+    public EndpointSettings getB2cStatus() {
+        return b2cStatus;
+    }
+
+    public void setB2cStatus(EndpointSettings b2cStatus) {
+        this.b2cStatus = b2cStatus;
     }
 
     /**
