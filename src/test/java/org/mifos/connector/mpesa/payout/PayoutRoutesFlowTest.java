@@ -45,9 +45,11 @@ import static org.mifos.connector.mpesa.payout.PayoutVariables.PAYOUT_ACCOUNT;
 import static org.mifos.connector.mpesa.payout.PayoutVariables.PAYOUT_CONVERSATION_ID;
 import static org.mifos.connector.mpesa.payout.PayoutVariables.PAYOUT_OUTCOME;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -209,33 +211,62 @@ class PayoutRoutesFlowTest {
     }
 
     @Test
-    void paymentResultCallback_shouldBeHandledAndAcknowledged() throws Exception {
-        var body = PayoutTestData.paymentResult(TRANSACTION_ID, 0, "1500");
+    void statusQuery_rejectedToken_shouldBeEvictedSoTheNextCheckFetchesANewOne() {
+        tokens.save(account, "revoked", 3599);
+        safaricom.respond(MpesaEndpoint.B2C_STATUS, 401, "{\"errorCode\":\"404.001.03\"}");
 
-        var response = post("/payout/result", body);
+        queryStatus();
 
-        assertEquals(200, response.statusCode());
-        assertEquals(0, new JSONObject(response.body()).getInt("ResultCode"));
-        verify(resultHandler).onPaymentResult(org.mockito.ArgumentMatchers.contains(TRANSACTION_ID));
+        assertNull(tokens.get(account));
     }
 
     @Test
-    void statusResultCallback_shouldBeHandledAndAcknowledged() throws Exception {
-        var response = post("/payout/status/result", PayoutTestData.statusResult(TRANSACTION_ID, "Completed",
-                "1500"));
+    void statusQuery_answered_shouldKeepTheToken() {
+        tokens.save(account, "tok-1", 3599);
+        safaricom.respond(MpesaEndpoint.B2C_STATUS, 200, "{\"ResponseCode\":\"0\"}");
+
+        queryStatus();
+
+        assertEquals("tok-1", tokens.get(account));
+    }
+
+    @Test
+    void paymentResultCallback_shouldPassTheBodyAndTheUrlTokenToTheHandler() throws Exception {
+        var body = PayoutTestData.paymentResult(TRANSACTION_ID, 0, "1500");
+
+        var response = post("/payout/result/" + PayoutTestData.token(TRANSACTION_ID), body);
 
         assertEquals(200, response.statusCode());
-        verify(resultHandler).onStatusResult(org.mockito.ArgumentMatchers.contains(TRANSACTION_ID));
+        assertEquals(0, new JSONObject(response.body()).getInt("ResultCode"));
+        verify(resultHandler).onPaymentResult(contains(TRANSACTION_ID), eq(PayoutTestData.token(TRANSACTION_ID)));
+    }
+
+    @Test
+    void statusResultCallback_shouldPassTheBodyAndTheUrlTokenToTheHandler() throws Exception {
+        var response = post("/payout/status/result/forged", PayoutTestData.statusResult(TRANSACTION_ID,
+                "Completed", "1500"));
+
+        assertEquals(200, response.statusCode());
+        verify(resultHandler).onStatusResult(contains(TRANSACTION_ID), eq("forged"));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/payout/timeout", "/payout/status/timeout"})
+    @ValueSource(strings = {"/payout/result", "/payout/status/result"})
+    void resultCallbacks_withoutToken_shouldNotReachTheHandler(String path) throws Exception {
+        var response = post(path, PayoutTestData.paymentResult(TRANSACTION_ID, 2001, null));
+
+        assertEquals(404, response.statusCode());
+        verifyNoInteractions(resultHandler);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/payout/timeout/any", "/payout/status/timeout/any"})
     void timeoutCallbacks_shouldOnlyBeAcknowledged(String path) throws Exception {
         var response = post(path, "{\"Result\":{\"ResultCode\":1}}");
 
         assertEquals(200, response.statusCode());
         assertEquals(0, new JSONObject(response.body()).getInt("ResultCode"));
-        org.mockito.Mockito.verifyNoInteractions(resultHandler);
+        verifyNoInteractions(resultHandler);
     }
 
     private Exchange pay() {

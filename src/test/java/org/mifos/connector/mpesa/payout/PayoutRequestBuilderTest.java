@@ -36,8 +36,10 @@ class PayoutRequestBuilderTest {
         assertEquals(254708374149L, dto.getPartyB());
         assertEquals("Refund of overpayment", dto.getRemarks());
         assertEquals("ACC-1", dto.getOccasion());
-        assertEquals("https://connector/payout/result", dto.getResultUrl());
-        assertEquals("https://connector/payout/timeout", dto.getQueueTimeOutUrl());
+        assertEquals("https://connector/payout/result/" + PayoutTestData.token(TRANSACTION_ID),
+                dto.getResultUrl());
+        assertEquals("https://connector/payout/timeout/" + PayoutTestData.token(TRANSACTION_ID),
+                dto.getQueueTimeOutUrl());
     }
 
     @Test
@@ -63,9 +65,10 @@ class PayoutRequestBuilderTest {
     void build_withAmountLimitsFromAccount_shouldApplyThem() {
         MpesaProps.MPESA account = account();
         account.getB2c().setMaxAmount(1000);
+        String request = payoutRequest("254708374149", "1001");
 
         PayoutValidationException e = assertThrows(PayoutValidationException.class,
-                () -> builder.build(TRANSACTION_ID, payoutRequest("254708374149", "1001"), account));
+                () -> builder.build(TRANSACTION_ID, request, account));
         assertEquals(INVALID_AMOUNT, e.getErrorCode());
     }
 
@@ -129,16 +132,18 @@ class PayoutRequestBuilderTest {
     void build_whenB2cDisabled_shouldReject() {
         MpesaProps.MPESA account = account();
         account.getB2c().setEnabled(false);
+        String request = payoutRequest("254708374149", "100");
 
         PayoutValidationException e = assertThrows(PayoutValidationException.class,
-                () -> builder.build(TRANSACTION_ID, payoutRequest("254708374149", "100"), account));
+                () -> builder.build(TRANSACTION_ID, request, account));
         assertEquals(PAYOUT_NOT_ENABLED, e.getErrorCode());
     }
 
     @Test
     void build_withoutAccount_shouldReject() {
+        String request = payoutRequest("254708374149", "100");
         PayoutValidationException e = assertThrows(PayoutValidationException.class,
-                () -> builder.build(TRANSACTION_ID, payoutRequest("254708374149", "100"), null));
+                () -> builder.build(TRANSACTION_ID, request, null));
         assertEquals(PAYOUT_NOT_ENABLED, e.getErrorCode());
     }
 
@@ -146,9 +151,10 @@ class PayoutRequestBuilderTest {
     void build_withoutB2cSettings_shouldReject() {
         MpesaProps.MPESA account = account();
         account.setB2c(null);
+        String request = payoutRequest("254708374149", "100");
 
         PayoutValidationException e = assertThrows(PayoutValidationException.class,
-                () -> builder.build(TRANSACTION_ID, payoutRequest("254708374149", "100"), account));
+                () -> builder.build(TRANSACTION_ID, request, account));
         assertEquals(PAYOUT_NOT_ENABLED, e.getErrorCode());
     }
 
@@ -204,13 +210,29 @@ class PayoutRequestBuilderTest {
         assertEquals(600997L, dto.getPartyA());
         assertEquals("4", dto.getIdentifierType());
         assertEquals("testapi", dto.getInitiator());
-        assertEquals("https://connector/payout/status/result", dto.getResultUrl());
-        assertEquals("https://connector/payout/status/timeout", dto.getQueueTimeOutUrl());
+        assertEquals("https://connector/payout/status/result/" + PayoutTestData.token(TRANSACTION_ID),
+                dto.getResultUrl());
+        assertEquals("https://connector/payout/status/timeout/" + PayoutTestData.token(TRANSACTION_ID),
+                dto.getQueueTimeOutUrl());
     }
 
     private void assertRejected(String code, String request) {
+        MpesaProps.MPESA account = account();
         PayoutValidationException e = assertThrows(PayoutValidationException.class,
-                () -> builder.build(TRANSACTION_ID, request, account()));
+                () -> builder.build(TRANSACTION_ID, request, account));
         assertEquals(code, e.getErrorCode(), e.getMessage());
+    }
+
+    @Test
+    void build_withoutCallbackSecret_shouldRefuseToSend() {
+        var unsigned = new PayoutRequestBuilder("https://connector", "/payout/result", "/payout/timeout",
+                "/payout/status/result", "/payout/status/timeout", new PayoutCallbackSigner(" "));
+        String request = payoutRequest("254708374149", "100");
+        MpesaProps.MPESA account = account();
+
+        PayoutValidationException e = assertThrows(PayoutValidationException.class,
+                () -> unsigned.build(TRANSACTION_ID, request, account));
+        assertEquals(PAYOUT_NOT_ENABLED, e.getErrorCode());
+        assertTrue(e.getMessage().contains("MPESA_PAYOUT_CALLBACK_SECRET"), e.getMessage());
     }
 }

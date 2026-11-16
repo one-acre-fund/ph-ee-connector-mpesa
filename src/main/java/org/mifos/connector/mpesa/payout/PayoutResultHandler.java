@@ -33,10 +33,12 @@ import static org.mifos.connector.mpesa.zeebe.ZeebeVariables.SERVER_TRANSACTION_
 /**
  * Turns the results Safaricom posts for payouts into the {@code payout-result} message of the payout process.
  *
- * <p>A result is only accepted for a payout this connector sent, and a success only when the amount matches what was
+ * <p>A result is only accepted when it carries the callback token issued for its transaction id (see
+ * {@link PayoutCallbackSigner}), for a payout this connector sent, and a success only when the amount matches what was
  * sent. Anything else is logged and dropped: the payout stays unknown, the status checks run, and an operator resolves
- * it if they cannot. The message id is the same for every result of a payout, so Zeebe accepts the first final outcome
- * and drops any repeat (a duplicate callback, or a status result after the payment result).
+ * it if they cannot. The message id is the same for every result of a payout, so while the first message is buffered
+ * ({@code mpesa.payout.message-ttl}) Zeebe drops any repeat (a duplicate callback, or a status result after the
+ * payment result). A repeat after that is published again and only matters if the process still waits for a result.
  */
 @Slf4j
 @Component
@@ -52,17 +54,22 @@ public class PayoutResultHandler {
     @Value("${mpesa.payout.message-ttl}")
     private final Duration messageTtl;
     private final ObjectProvider<MeterRegistry> meterRegistry;
+    private final PayoutCallbackSigner callbackSigner;
     private final Map<String, AtomicReference<Double>> balances = new ConcurrentHashMap<>();
 
     /**
-     * Handles the result of a B2C payment request.
+     * Handles the result of a B2C payment request posted to the payout's result URL, whose last segment is the
+     * callback token.
      */
-    public void onPaymentResult(String body) {
+    public void onPaymentResult(String body, String token) {
         var result = parse(body);
         if (result == null) {
             return;
         }
         String transactionId = result.originatorConversationId();
+        if (!authentic(transactionId, token, "payment")) {
+            return;
+        }
         var payout = sentPayout(transactionId, "payment");
         if (payout == null) {
             return;
@@ -93,7 +100,7 @@ public class PayoutResultHandler {
      * Handles the result of a transaction status query. Only a completed payout is final; anything else leaves it
      * unknown, because a status query cannot prove a payout will never be made.
      */
-    public void onStatusResult(String body) {
+    public void onStatusResult(String body, String token) {
         var result = parse(body);
         if (result == null) {
             return;
@@ -101,6 +108,9 @@ public class PayoutResultHandler {
         String transactionId = result.referenceData("Occasion");
         if (transactionId == null) {
             transactionId = result.parameter("OriginatorConversationID");
+        }
+        if (!authentic(transactionId, token, "status")) {
+            return;
         }
         var payout = sentPayout(transactionId, "status");
         if (payout == null) {
@@ -133,6 +143,19 @@ public class PayoutResultHandler {
             log.error("event=payout_result_unreadable body={}", body);
             return null;
         }
+    }
+
+    /**
+     * A forged result could fail a paid payout, so a result without the token issued for its transaction id is
+     * dropped before anything else.
+     */
+    private boolean authentic(String transactionId, String token, String kind) {
+        if (callbackSigner.verify(transactionId, token)) {
+            return true;
+        }
+        log.error("event=payout_result_unauthenticated kind={} transaction={}: wrong or missing callback token",
+                kind, transactionId);
+        return false;
     }
 
     private PayoutRecord sentPayout(String transactionId, String kind) {

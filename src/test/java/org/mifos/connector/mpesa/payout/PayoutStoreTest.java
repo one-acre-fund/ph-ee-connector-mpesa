@@ -19,7 +19,7 @@ class PayoutStoreTest {
 
     @Test
     void inMemory_shouldFindWhatWasSaved() {
-        InMemoryPayoutStore store = new InMemoryPayoutStore();
+        InMemoryPayoutStore store = PayoutTestData.memoryStore();
         store.logStoreBackend();
         store.save(RECORD);
 
@@ -47,11 +47,61 @@ class PayoutStoreTest {
         assertNull(store.find("tx-2"));
     }
 
-    private static void assertRecord(PayoutRecord record) {
-        assertEquals("tx-1", record.transactionId());
-        assertEquals("fineract", record.account());
-        assertEquals(1500, record.amount());
-        assertEquals(254708374149L, record.msisdn());
-        assertEquals(42L, record.sentAtMillis());
+    private static void assertRecord(PayoutRecord payout) {
+        assertEquals("tx-1", payout.transactionId());
+        assertEquals("fineract", payout.account());
+        assertEquals(1500, payout.amount());
+        assertEquals(254708374149L, payout.msisdn());
+        assertEquals(42L, payout.sentAtMillis());
+    }
+
+    @Test
+    void inMemory_shouldForgetPayoutsAfterTheRetentionPeriod() {
+        var clock = new MutableClock();
+        var store = new InMemoryPayoutStore(Duration.ofHours(1), clock);
+        store.save(RECORD);
+
+        clock.advance(Duration.ofMinutes(59));
+        assertRecord(store.find("tx-1"));
+        clock.advance(Duration.ofMinutes(1));
+        assertNull(store.find("tx-1"));
+    }
+
+    @Test
+    void inMemory_shouldSweepExpiredPayoutsWithoutLookingThemUp() {
+        var clock = new MutableClock();
+        var store = new InMemoryPayoutStore(Duration.ofHours(1), clock);
+        for (int i = 0; i < 100; i++) {
+            store.save(new PayoutRecord("old-" + i, "fineract", 10, 254708374149L, 0));
+        }
+        clock.advance(Duration.ofHours(2));
+
+        store.save(RECORD);
+
+        assertEquals(1, store.size());
+        assertRecord(store.find("tx-1"));
+    }
+
+    private static final class MutableClock extends java.time.Clock {
+        private java.time.Instant now = java.time.Instant.parse("2026-11-16T10:00:00Z");
+
+        void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public java.time.Instant instant() {
+            return now;
+        }
     }
 }

@@ -65,13 +65,21 @@ the same contract with their own `init-{ps}-payout` / `get-{ps}-payout-status` w
 
 Outcomes:
 - **Failed** only when nothing can have been paid: invalid request (whole KES amount within the account limits,
-  `254` + 9-digit MSISDN; missing or short remarks become "Payout", long ones are cut to 100), a 4xx or non-zero `ResponseCode`, or a request that never left.
+  `254` + 9-digit MSISDN; missing or short remarks become "Payout", long ones are cut to 100), a 4xx or non-zero
+  `ResponseCode`, or a request that never left. A retried `init-mpesa-payout` job whose payout an earlier activation
+  already sent (its record exists) is never failed: whatever this attempt gets, the outcome is unknown
+  (`event=payout_retry_after_dispatch`).
 - **Unknown** when the request may have reached Safaricom (timeout, 5xx, no response). It is never failed
   automatically: the result callback or a status query resolves it. After `mpesa.payout.status.max-checks` checks the
   process waits for a late result or for an operator: `POST /channel/transaction/{transactionId}/resolve` with
   `{"payoutFailed": false, "externalId": "<M-Pesa receipt>"}` or `{"payoutFailed": true}`.
-- **Result callbacks** are only accepted for a payout this connector sent and, on success, only when the amount matches.
-  Each payout publishes `payout-result` at most once.
+- **Result callbacks** are only accepted with the callback token issued for their transaction id (see below), for a
+  payout this connector sent, with a valid `ResultCode` (a result without one leaves the payout unknown) and, on
+  success, only when the amount matches.
+- **`payout-result` is published once per message TTL.** Every result of a payout uses the message id
+  `payout-result-{transactionId}`, and Zeebe drops a repeat while the first message is still buffered, i.e. for
+  `mpesa.payout.message-ttl` (1 hour). A duplicate arriving later is published again; it only has an effect if the
+  process is still waiting for a result at that point, so the process, not this connector, is the final guard.
 
 Configuration, per account under `accounts.group[].b2c` (all from secrets, `enabled: false` by default):
 `short-code`, `initiator-name`, `security-credential` (the initiator password encrypted with the Safaricom certificate
@@ -79,8 +87,17 @@ and base64 encoded, never the plain password), optional `client-key`/`client-sec
 Daraja app, `command-id` (default `BusinessPayment`), `min-amount` and `max-amount`.
 
 Callbacks: Safaricom posts results to `mpesa.local.host` + `mpesa.local.payout-result` / `payout-status-result` (and
-the two timeout paths). Expose them through Kong to Safaricom's IP addresses only, with hard-to-guess paths.
+the two timeout paths) + `/{token}`. The token is an HMAC-SHA256 of the transaction id under
+`mpesa.payout.callback-secret` (`MPESA_PAYOUT_CALLBACK_SECRET`, required: without it no payout is sent), so it differs
+per payout and cannot be made up from a transaction id. A result with a wrong or missing token is dropped
+(`event=payout_result_unauthenticated`); a path without a token answers 404. Use the same secret on every pod;
+rotating it makes the callbacks of payouts in flight fail authentication, and those are resolved by status checks or
+an operator. Also expose the callback paths through Kong to Safaricom's IP addresses only.
+
+Store: `mpesa-connector.redis.type` (`redis` by default, `memory` for a single pod). Either way a payout is kept for
+`ttl.payout-seconds` (7 days).
 
 Monitoring: `mpesa_b2c_utility_balance{account}` (from each successful result), log events `event=payout_result`,
 `event=payout_unknown` (needs an operator), `event=payout_result_unknown` and `event=payout_result_mismatch` (a result
-that does not match a payout we sent), and the `mpesa-b2c-*` / `mpesa-b2c-status-*` circuit breakers.
+that does not match a payout we sent), `event=payout_result_unauthenticated` (a result without a valid token: possible
+forgery), and the `mpesa-b2c-*` / `mpesa-b2c-status-*` circuit breakers.

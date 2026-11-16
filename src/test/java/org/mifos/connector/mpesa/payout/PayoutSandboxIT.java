@@ -92,7 +92,8 @@ class PayoutSandboxIT {
 
         var host = callbackHost != null ? callbackHost : "https://example.invalid";
         requestBuilder = new PayoutRequestBuilder(host, "/payout/result", "/payout/timeout",
-                "/payout/status/result", "/payout/status/timeout");
+                "/payout/status/result", "/payout/status/timeout",
+                new PayoutCallbackSigner(env("MPESA_PAYOUT_CALLBACK_SECRET").orElse("sandbox-callback-secret")));
         var meterRegistry = new DefaultListableBeanFactory().getBeanProvider(MeterRegistry.class);
         var httpCaller = new MpesaHttpCaller(camel.createProducerTemplate(), new MpesaResilienceProperties(),
                 meterRegistry);
@@ -164,9 +165,9 @@ class PayoutSandboxIT {
     private B2CResult awaitCallback(boolean payment) {
         var body = ArgumentCaptor.forClass(String.class);
         if (payment) {
-            verify(resultHandler, timeout(CALLBACK_WAIT.toMillis())).onPaymentResult(body.capture());
+            verify(resultHandler, timeout(CALLBACK_WAIT.toMillis())).onPaymentResult(body.capture(), org.mockito.ArgumentMatchers.anyString());
         } else {
-            verify(resultHandler, timeout(CALLBACK_WAIT.toMillis())).onStatusResult(body.capture());
+            verify(resultHandler, timeout(CALLBACK_WAIT.toMillis())).onStatusResult(body.capture(), org.mockito.ArgumentMatchers.anyString());
         }
         log.info("Sandbox {} callback: {}", payment ? "payment" : "status", body.getValue());
         return B2CResult.parse(body.getValue());

@@ -77,4 +77,19 @@ class B2CResultTest {
     void parse_withoutResult_shouldThrow() {
         assertThrows(JSONException.class, () -> B2CResult.parse("{\"Body\":{}}"));
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"", ",\"ResultCode\":null", ",\"ResultCode\":\" \"",
+            ",\"ResultCode\":{\"a\":1}", ",\"ResultCode\":1.5", ",\"ResultCode\":\"0; drop\""})
+    void parse_withoutValidResultCode_shouldThrow(String resultCode) {
+        assertThrows(JSONException.class, () -> B2CResult.parse("{\"Result\":{\"ResultDesc\":\"x\"" + resultCode + "}}"));
+    }
+
+    @Test
+    void parse_withStringResultCodes_shouldKeepThem() {
+        assertEquals("0", B2CResult.parse("{\"Result\":{\"ResultCode\":\" 0 \"}}").resultCode());
+        assertEquals("SFC_IC0003", B2CResult.parse("{\"Result\":{\"ResultCode\":\"SFC_IC0003\"}}").resultCode());
+        assertEquals("2001", B2CResult.parse("{\"Result\":{\"ResultCode\":2001}}").resultCode());
+        assertEquals("12345678901", B2CResult.parse("{\"Result\":{\"ResultCode\":12345678901}}").resultCode());
+    }
 }

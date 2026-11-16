@@ -1,11 +1,13 @@
 package org.mifos.connector.mpesa.payout;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * The {@code Result} Safaricom posts to a ResultURL, for a B2C payment or a transaction status query.
@@ -17,19 +19,34 @@ public record B2CResult(String resultCode, String resultDesc, String originatorC
 
     public static final String SUCCESS = "0";
 
+    // Numeric (0, 2001...) or Safaricom's alphanumeric codes (e.g. SFC_IC0003)
+    private static final Pattern RESULT_CODE = Pattern.compile("[A-Za-z0-9_.-]+");
+
     /**
-     * @throws org.json.JSONException when the body is not a Safaricom result
+     * @throws org.json.JSONException when the body is not a Safaricom result, including one without a valid
+     *                                ResultCode: a missing code proves nothing about the payout, so it must not be
+     *                                read as a failure
      */
     public static B2CResult parse(String body) {
         var result = new JSONObject(body).getJSONObject("Result");
         return new B2CResult(
-                String.valueOf(result.opt("ResultCode")),
+                resultCode(result.opt("ResultCode")),
                 result.optString("ResultDesc", ""),
                 result.optString("OriginatorConversationID", null),
                 result.optString("ConversationID", null),
                 result.optString("TransactionID", null),
                 keyValues(result.optJSONObject("ResultParameters"), "ResultParameter"),
                 keyValues(result.optJSONObject("ReferenceData"), "ReferenceItem"));
+    }
+
+    private static String resultCode(Object code) {
+        if (code instanceof Integer || code instanceof Long) {
+            return String.valueOf(code);
+        }
+        if (code instanceof String text && RESULT_CODE.matcher(text.trim()).matches()) {
+            return text.trim();
+        }
+        throw new JSONException("ResultCode is missing or malformed: " + code);
     }
 
     public boolean isSuccess() {

@@ -96,9 +96,14 @@ public class PayoutWorker {
             return;
         }
 
-        // Saved before sending, so the result callback can always be checked against it
-        payoutStore.save(new PayoutRecord(transactionId, account.getName(), request.getAmount(), request.getPartyB(),
-                System.currentTimeMillis()));
+        // A record means an earlier activation of this job got as far as sending: Safaricom may have paid it, even if
+        // completing that job failed and this is a retry
+        boolean sentBefore = payoutStore.find(transactionId) != null;
+        if (!sentBefore) {
+            // Saved before sending, so the result callback can always be checked against it
+            payoutStore.save(new PayoutRecord(transactionId, account.getName(), request.getAmount(),
+                    request.getPartyB(), System.currentTimeMillis()));
+        }
 
         var exchange = new DefaultExchange(camelContext);
         exchange.setProperty(CORRELATION_ID, transactionId);
@@ -120,6 +125,13 @@ public class PayoutWorker {
         }
 
         var outcome = exchange.getProperty(PAYOUT_OUTCOME, Outcome.UNKNOWN, Outcome.class);
+        if (outcome == Outcome.FAILED && sentBefore) {
+            // This attempt failed (no token, circuit open, refused...), but that proves nothing about the earlier
+            // one: reconcile through the result callback and status checks instead of releasing the AMS reservation
+            log.warn("event=payout_retry_after_dispatch transaction={} code={}: an earlier attempt may have paid, "
+                    + "treating the outcome as unknown", transactionId, exchange.getProperty(ERROR_CODE));
+            outcome = Outcome.UNKNOWN;
+        }
         var completion = switch (outcome) {
             case FAILED -> failed(exchange.getProperty(ERROR_CODE, String.class),
                     exchange.getProperty(ERROR_DESCRIPTION, String.class),

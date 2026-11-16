@@ -57,7 +57,7 @@ class PayoutWorkerTest {
     void setUp() {
         zeebe = new ZeebeMocks();
         producerTemplate = mock(ProducerTemplate.class);
-        store = new InMemoryPayoutStore();
+        store = PayoutTestData.memoryStore();
         jobClient = ZeebeMocks.jobClient();
         MpesaUtils mpesaUtils = mock(MpesaUtils.class);
         when(mpesaUtils.getMpesaProperties("fineract", TRANSACTION_ID)).thenReturn(PayoutTestData.account());
@@ -132,6 +132,40 @@ class PayoutWorkerTest {
         Map<String, Object> completed = completedVariables();
         assertEquals(true, completed.get(PAYOUT_FAILED));
         assertEquals("400.002.02", completed.get(ERROR_CODE));
+    }
+
+    @Test
+    void initPayout_retryAfterAnEarlierSend_shouldNeverCompleteAsFailed() throws Exception {
+        // An earlier activation saved the record and sent the payout, but completing its job failed
+        var earlier = new PayoutRecord(TRANSACTION_ID, "fineract", 1500, 254708374149L, 42L);
+        store.save(earlier);
+        doAnswer(invocation -> {
+            Exchange exchange = invocation.getArgument(1);
+            exchange.setProperty(PAYOUT_OUTCOME, Outcome.FAILED);
+            exchange.setProperty(ERROR_CODE, "TOKEN_ERROR");
+            return exchange;
+        }).when(producerTemplate).send(eq("direct:b2c-payment-base"), any(Exchange.class));
+
+        handle(variables(payoutRequest("254708374149", "1500")));
+
+        Map<String, Object> completed = completedVariables();
+        assertEquals(false, completed.get(PAYOUT_FAILED), "the first attempt may have paid");
+        assertEquals(false, completed.get(PAYOUT_ACCEPTED));
+        assertEquals(42L, store.find(TRANSACTION_ID).sentAtMillis(), "the original send is kept");
+    }
+
+    @Test
+    void initPayout_retryAfterAnEarlierSendThatWasAccepted_shouldWaitForTheResult() throws Exception {
+        store.save(new PayoutRecord(TRANSACTION_ID, "fineract", 1500, 254708374149L, 42L));
+        doAnswer(invocation -> {
+            Exchange exchange = invocation.getArgument(1);
+            exchange.setProperty(PAYOUT_OUTCOME, Outcome.ACCEPTED);
+            return exchange;
+        }).when(producerTemplate).send(eq("direct:b2c-payment-base"), any(Exchange.class));
+
+        handle(variables(payoutRequest("254708374149", "1500")));
+
+        assertEquals(true, completedVariables().get(PAYOUT_ACCEPTED));
     }
 
     @Test

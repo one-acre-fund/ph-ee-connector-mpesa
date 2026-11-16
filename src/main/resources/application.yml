@@ -78,6 +78,10 @@ mpesa:
   payout:
     # How long a payout result waits in Zeebe for the process to reach the payout-result catch event
     message-ttl: ${MPESA_PAYOUT_MESSAGE_TTL:PT1H}
+    # Signs each payout's callback URLs (HMAC-SHA256 of the transaction id). Required: without it no payout is sent.
+    # Same value on every pod; rotating it makes callbacks of payouts in flight fail authentication (status checks and
+    # operators still resolve them).
+    callback-secret: ${MPESA_PAYOUT_CALLBACK_SECRET:}
     status:
       # Status checks before an unknown payout is handed to an operator; the wait doubles up to max-timer
       max-checks: ${MPESA_PAYOUT_STATUS_MAX_CHECKS:8}
@@ -181,7 +185,8 @@ mpesa:
     transaction-callback: /buygoods/callback
     queue-timeout-url: /queuetimeout/callback
     result-url: /result/callback
-    # Where Safaricom posts payout results. Set hard-to-guess paths per environment and allow only Safaricom's IPs.
+    # Where Safaricom posts payout results; each payout's URL ends with its own callback token (/{token}).
+    # Also allow only Safaricom's IPs at the ingress.
     payout-result: ${MPESA_PAYOUT_RESULT_PATH:/payout/result}
     payout-timeout: ${MPESA_PAYOUT_TIMEOUT_PATH:/payout/timeout}
     payout-status-result: ${MPESA_PAYOUT_STATUS_RESULT_PATH:/payout/status/result}

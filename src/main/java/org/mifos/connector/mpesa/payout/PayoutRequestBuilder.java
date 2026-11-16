@@ -51,6 +51,7 @@ public class PayoutRequestBuilder {
     private final String statusResultPath;
     @Value("${mpesa.local.payout-status-timeout}")
     private final String statusTimeoutPath;
+    private final PayoutCallbackSigner callbackSigner;
 
     /**
      * The status query for a payout, found by its OriginatorConversationID (the transaction id).
@@ -62,8 +63,9 @@ public class PayoutRequestBuilder {
         dto.setSecurityCredential(b2c.getSecurityCredential());
         dto.setOriginalConversationId(transactionId);
         dto.setPartyA(Long.parseLong(b2c.getShortCode().trim()));
-        dto.setResultUrl(host + statusResultPath);
-        dto.setQueueTimeOutUrl(host + statusTimeoutPath);
+        var token = callbackSigner.sign(transactionId);
+        dto.setResultUrl(host + statusResultPath + "/" + token);
+        dto.setQueueTimeOutUrl(host + statusTimeoutPath + "/" + token);
         dto.setRemarks("Payout status check");
         dto.setOccasion(transactionId);
         return dto;
@@ -73,6 +75,11 @@ public class PayoutRequestBuilder {
         if (account == null || account.getB2c() == null || !account.getB2c().isEnabled()) {
             throw new PayoutValidationException(PAYOUT_NOT_ENABLED, "B2C payouts are not enabled for account "
                     + (account == null ? null : account.getName()));
+        }
+        if (!callbackSigner.isConfigured()) {
+            // Without the secret the result callbacks could not be authenticated, so nothing is sent
+            throw new PayoutValidationException(PAYOUT_NOT_ENABLED, "B2C payouts need mpesa.payout.callback-secret "
+                    + "(MPESA_PAYOUT_CALLBACK_SECRET) to authenticate Safaricom's result callbacks");
         }
         MpesaProps.B2C b2c = account.getB2c();
         JSONObject request;
@@ -92,8 +99,10 @@ public class PayoutRequestBuilder {
         dto.setPartyB(msisdn(request.optJSONArray("payee")));
         dto.setRemarks(remarks(request.opt("remarks")));
         dto.setOccasion(accountId(request.optJSONArray("payee")));
-        dto.setResultUrl(host + resultPath);
-        dto.setQueueTimeOutUrl(host + timeoutPath);
+        // Each payout's callback URLs carry its own token, so a result can only be posted by whoever got the request
+        var token = callbackSigner.sign(transactionId);
+        dto.setResultUrl(host + resultPath + "/" + token);
+        dto.setQueueTimeOutUrl(host + timeoutPath + "/" + token);
         return dto;
     }
 

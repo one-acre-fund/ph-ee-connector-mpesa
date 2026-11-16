@@ -5,7 +5,7 @@ package org.mifos.connector.mpesa.payout;
  */
 public interface PayoutStore {
 
-    void save(PayoutRecord record);
+    void save(PayoutRecord payout);
 
     /**
      * @return the payout, or null when it was not sent by this connector or has expired

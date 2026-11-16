@@ -5,6 +5,7 @@ import org.mifos.connector.mpesa.utility.MpesaProps;
 final class PayoutTestData {
 
     static final String TRANSACTION_ID = "tx-payout-1";
+    static final PayoutCallbackSigner SIGNER = new PayoutCallbackSigner("test-callback-secret");
 
     private PayoutTestData() {
     }
@@ -27,6 +28,14 @@ final class PayoutTestData {
         return account;
     }
 
+    static InMemoryPayoutStore memoryStore() {
+        return new InMemoryPayoutStore(java.time.Duration.ofDays(7), java.time.Clock.systemUTC());
+    }
+
+    static String token(String transactionId) {
+        return SIGNER.sign(transactionId);
+    }
+
     static String payoutRequest(String msisdn, String amount) {
         return "{\"payee\":[{\"key\":\"MSISDN\",\"value\":\"" + msisdn + "\"},{\"key\":\"ACCOUNTID\",\"value\":\"ACC-1\"}],"
                 + "\"amount\":{\"amount\":\"" + amount + "\",\"currency\":\"KES\"},\"remarks\":\"Refund of overpayment\"}";
@@ -34,7 +43,7 @@ final class PayoutTestData {
 
     static PayoutRequestBuilder requestBuilder() {
         return new PayoutRequestBuilder("https://connector", "/payout/result", "/payout/timeout",
-                "/payout/status/result", "/payout/status/timeout");
+                "/payout/status/result", "/payout/status/timeout", SIGNER);
     }
 
     static String paymentResult(String transactionId, int resultCode, String amount) {

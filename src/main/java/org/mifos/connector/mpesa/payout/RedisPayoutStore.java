@@ -32,8 +32,8 @@ public class RedisPayoutStore implements PayoutStore {
     }
 
     @Override
-    public void save(PayoutRecord record) {
-        redisTemplate.opsForValue().set(keyPrefix + record.transactionId(), record.toJson(), ttl);
+    public void save(PayoutRecord payout) {
+        redisTemplate.opsForValue().set(keyPrefix + payout.transactionId(), payout.toJson(), ttl);
     }
 
     @Override

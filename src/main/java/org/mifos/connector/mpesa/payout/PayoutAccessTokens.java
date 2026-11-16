@@ -1,6 +1,7 @@
 package org.mifos.connector.mpesa.payout;
 
 import org.mifos.connector.mpesa.utility.MpesaProps;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,7 @@ public class PayoutAccessTokens {
     private final Map<String, Token> tokens = new ConcurrentHashMap<>();
     private final Clock clock;
 
+    @Autowired
     public PayoutAccessTokens() {
         this(Clock.systemUTC());
     }
