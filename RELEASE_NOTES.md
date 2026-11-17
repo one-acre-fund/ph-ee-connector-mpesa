@@ -1,5 +1,8 @@
 # Release Notes
 
+## Version 1.4.2
+        * [FD-1946] - Client refunds and payouts setup for mpesa
+
 ## Version 1.4.1
 
         * [FD-1975] - Add validation for channel requests to ensure that the amount is a whole number and that the MSISDN is present. If not, fail the transfer with a business reason instead of retrying and raising an incident.

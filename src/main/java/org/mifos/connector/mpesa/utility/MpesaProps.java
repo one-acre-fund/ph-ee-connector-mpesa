@@ -1,5 +1,7 @@
 package org.mifos.connector.mpesa.utility;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Component;
@@ -32,6 +34,7 @@ public class MpesaProps {
         private String clientSecret;
         private String apiHost;
         private String passKey;
+        private B2C b2c = new B2C();
 
 
         public String getName() {
@@ -98,6 +101,14 @@ public class MpesaProps {
             this.passKey = passKey;
         }
 
+        public B2C getB2c() {
+            return b2c;
+        }
+
+        public void setB2c(B2C b2c) {
+            this.b2c = b2c;
+        }
+
         public String getDefaultClientKey(){
             String key = null;
             if(getName().equals("default")){
@@ -120,6 +131,31 @@ public class MpesaProps {
                 ", businessShortCode='" + businessShortCode + '\'' +
                 ", till='" + till + '\'' +
                 '}';
+        }
+    }
+
+    /**
+     * B2C (payout) settings of an account. The client key and secret fall back to the account's own when the B2C
+     * shortcode uses the same Daraja app.
+     */
+    @Getter
+    @Setter
+    public static class B2C {
+        private boolean enabled;
+        private String shortCode;
+        private String initiatorName;
+        // The initiator password encrypted with the Safaricom certificate and base64 encoded, never the plain password
+        private String securityCredential;
+        private String clientKey;
+        private String clientSecret;
+        private String commandId = "BusinessPayment";
+        private long minAmount = 10;
+        private long maxAmount = 250000;
+
+        @Override
+        public String toString() {
+            return "B2C{enabled=" + enabled + ", shortCode='" + shortCode + "', initiatorName='" + initiatorName
+                    + "', commandId='" + commandId + "'}";
         }
     }
 }

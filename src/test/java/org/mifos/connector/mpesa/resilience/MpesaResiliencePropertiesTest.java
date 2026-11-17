@@ -52,6 +52,8 @@ class MpesaResiliencePropertiesTest {
         assertSame(properties.getToken(), properties.settingsFor(MpesaEndpoint.TOKEN));
         assertSame(properties.getStkPush(), properties.settingsFor(MpesaEndpoint.STK_PUSH));
         assertSame(properties.getStkQuery(), properties.settingsFor(MpesaEndpoint.STK_QUERY));
+        assertSame(properties.getB2c(), properties.settingsFor(MpesaEndpoint.B2C));
+        assertSame(properties.getB2cStatus(), properties.settingsFor(MpesaEndpoint.B2C_STATUS));
         properties.getStkPush().getRetry().setRetryStatusCodes(null);
         properties.getStkPush().getCircuitBreaker().setFailureStatusCodes(null);
         assertEquals(List.of(), properties.getStkPush().getRetry().getRetryStatusCodes());

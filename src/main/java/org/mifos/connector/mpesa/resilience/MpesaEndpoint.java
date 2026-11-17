@@ -5,7 +5,7 @@ package org.mifos.connector.mpesa.resilience;
  */
 public enum MpesaEndpoint {
 
-    TOKEN("token"), STK_PUSH("stk-push"), STK_QUERY("stk-query");
+    TOKEN("token"), STK_PUSH("stk-push"), STK_QUERY("stk-query"), B2C("b2c"), B2C_STATUS("b2c-status");
 
     private final String id;
 
