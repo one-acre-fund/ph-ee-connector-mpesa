@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 
 import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
 import java.net.UnknownHostException;
@@ -115,6 +116,12 @@ public class MpesaHttpCaller {
         Retry retry = retries.retry(name, retryConfigs.get(endpoint));
         EndpointSettings settings = properties.settingsFor(endpoint);
         String target = uri + (uri.contains("?") ? "&" : "?") + timeoutParameters(settings);
+        // A marshalled body is a stream cache that the first attempt reads to its end; the copies
+        // handed to the next attempts would share it and send an empty body. Keep the bytes instead.
+        Object body = exchange.getMessage().getBody();
+        if (body instanceof InputStream) {
+            exchange.getMessage().setBody(exchange.getMessage().getBody(byte[].class));
+        }
         Message request = exchange.getMessage().copy();
         long lastStart = exchange.getProperty(JOB_DEADLINE, Long.MAX_VALUE, Long.class)
                 - properties.getJobDeadlineMargin().toMillis() - longestAttempt(settings);

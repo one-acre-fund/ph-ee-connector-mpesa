@@ -2,6 +2,7 @@ package org.mifos.connector.mpesa.resilience;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.retry.RetryConfig;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -9,6 +10,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.ProducerTemplate;
+import org.apache.camel.converter.stream.InputStreamCache;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.support.DefaultExchange;
@@ -25,6 +27,7 @@ import java.net.NoRouteToHostException;
 import java.net.ServerSocket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -129,6 +132,25 @@ class MpesaHttpCallerTest {
                 "http://localhost:" + closedPort + PATH + "?throwExceptionOnFailure=false", exchange));
         assertEquals(1.0, meterRegistry.get("resilience4j.retry.calls").tag("name", "mpesa-stk-push-localhost")
                 .tag("kind", "failed_with_retry").functionCounter().count());
+    }
+
+    @Test
+    void retriedRequestCarriesTheMarshalledBodyAgain() throws Exception {
+        safaricom.stubFor(post(PATH).inScenario("flaky").whenScenarioStateIs(STARTED)
+                .willReturn(aResponse().withStatus(503)).willSetStateTo("recovered"));
+        safaricom.stubFor(post(PATH).inScenario("flaky").whenScenarioStateIs("recovered")
+                .willReturn(aResponse().withStatus(200)));
+        Exchange exchange = newExchange();
+        // what .marshal().json() leaves on the message when stream caching is on
+        exchange.getMessage().setBody(new InputStreamCache("{\"Amount\":1}".getBytes(StandardCharsets.UTF_8)));
+
+        callWith(MpesaEndpoint.STK_QUERY, url(), exchange);
+
+        assertEquals(200, status(exchange));
+        for (LoggedRequest request : safaricom.findAll(postRequestedFor(urlEqualTo(PATH)))) {
+            assertEquals("{\"Amount\":1}", request.getBodyAsString());
+        }
+        assertEquals(2, safaricom.findAll(postRequestedFor(urlEqualTo(PATH))).size());
     }
 
     @Test
